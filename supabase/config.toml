@@ -1,0 +1,10 @@
+project_id = "yidfawmlhjltclnzfyuz"
+
+[functions.tryon-request]
+verify_jwt = false
+
+[functions.redirect]
+verify_jwt = false
+
+[functions.admin-cashback]
+verify_jwt = false

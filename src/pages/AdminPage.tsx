@@ -1,21 +1,15 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { AppLayout } from "@/components/AppLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ExtensionLayout } from "@/components/ExtensionLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Trash2 } from "lucide-react";
 
 export default function AdminPage() {
   const [merchants, setMerchants] = useState<any[]>([]);
   const [pendingEntries, setPendingEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"merchants" | "cashback">("merchants");
   const [newMerchant, setNewMerchant] = useState({ domain: "", network: "", affiliate_link_template: "", commission_rate: "" });
 
   const loadData = async () => {
@@ -48,83 +42,80 @@ export default function AdminPage() {
 
   const deleteMerchant = async (id: string) => {
     await supabase.from("affiliate_merchants").delete().eq("id", id);
-    toast({ title: "Merchant deleted" });
+    toast({ title: "Deleted" });
     loadData();
   };
 
   const approveCashback = async (id: string) => {
     const { error } = await supabase.from("wallet_ledger").update({ status: "available" as any }).eq("id", id);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: "Cashback approved" }); loadData(); }
+    else { toast({ title: "Approved" }); loadData(); }
   };
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Admin Panel</h1>
-          <p className="text-muted-foreground">Manage merchants and cashback</p>
+    <ExtensionLayout>
+      <div className="p-6">
+        <h1 className="text-[22px] font-semibold tracking-tight text-foreground">Admin</h1>
+
+        <div className="mt-4 flex gap-4 border-b border-border">
+          <button
+            onClick={() => setTab("merchants")}
+            className={`pb-2 text-[13px] font-medium transition-all ${tab === "merchants" ? "border-b-2 border-foreground text-foreground" : "text-muted-foreground"}`}
+          >
+            Merchants
+          </button>
+          <button
+            onClick={() => setTab("cashback")}
+            className={`pb-2 text-[13px] font-medium transition-all ${tab === "cashback" ? "border-b-2 border-foreground text-foreground" : "text-muted-foreground"}`}
+          >
+            Cashback
+          </button>
         </div>
 
-        {loading ? <Skeleton className="h-64" /> : (
-          <Tabs defaultValue="merchants">
-            <TabsList><TabsTrigger value="merchants">Merchants</TabsTrigger><TabsTrigger value="cashback">Pending Cashback</TabsTrigger></TabsList>
+        {loading ? (
+          <div className="mt-6 space-y-3">
+            {[1, 2, 3].map(i => <div key={i} className="h-12 animate-pulse rounded-xl bg-secondary" />)}
+          </div>
+        ) : tab === "merchants" ? (
+          <div className="mt-4 space-y-4">
+            <div className="space-y-2">
+              <Input placeholder="Domain" value={newMerchant.domain} onChange={e => setNewMerchant(p => ({ ...p, domain: e.target.value }))} className="bg-secondary border-0 text-[13px]" />
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Network" value={newMerchant.network} onChange={e => setNewMerchant(p => ({ ...p, network: e.target.value }))} className="bg-secondary border-0 text-[13px]" />
+                <Input placeholder="Commission %" type="number" step="0.01" value={newMerchant.commission_rate} onChange={e => setNewMerchant(p => ({ ...p, commission_rate: e.target.value }))} className="bg-secondary border-0 text-[13px]" />
+              </div>
+              <Input placeholder="Link template" value={newMerchant.affiliate_link_template} onChange={e => setNewMerchant(p => ({ ...p, affiliate_link_template: e.target.value }))} className="bg-secondary border-0 text-[13px]" />
+              <Button onClick={addMerchant} className="w-full text-[13px]">Add Merchant</Button>
+            </div>
 
-            <TabsContent value="merchants" className="space-y-4">
-              <Card>
-                <CardHeader><CardTitle className="text-base">Add Merchant</CardTitle></CardHeader>
-                <CardContent className="grid gap-3 sm:grid-cols-2">
-                  <div><Label>Domain</Label><Input placeholder="zalando.se" value={newMerchant.domain} onChange={e => setNewMerchant(p => ({ ...p, domain: e.target.value }))} /></div>
-                  <div><Label>Network</Label><Input placeholder="tradedoubler" value={newMerchant.network} onChange={e => setNewMerchant(p => ({ ...p, network: e.target.value }))} /></div>
-                  <div><Label>Link Template</Label><Input placeholder="https://..." value={newMerchant.affiliate_link_template} onChange={e => setNewMerchant(p => ({ ...p, affiliate_link_template: e.target.value }))} /></div>
-                  <div><Label>Commission %</Label><Input type="number" step="0.01" value={newMerchant.commission_rate} onChange={e => setNewMerchant(p => ({ ...p, commission_rate: e.target.value }))} /></div>
-                  <Button onClick={addMerchant} className="sm:col-span-2"><Plus className="mr-1 h-4 w-4" />Add Merchant</Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Domain</TableHead><TableHead>Network</TableHead><TableHead>Commission</TableHead><TableHead></TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {merchants.map(m => (
-                        <TableRow key={m.id}>
-                          <TableCell className="font-medium">{m.domain}</TableCell>
-                          <TableCell>{m.network || "—"}</TableCell>
-                          <TableCell>{m.commission_rate ? `${m.commission_rate}%` : "—"}</TableCell>
-                          <TableCell><Button variant="ghost" size="icon" onClick={() => deleteMerchant(m.id)}><Trash2 className="h-4 w-4" /></Button></TableCell>
-                        </TableRow>
-                      ))}
-                      {merchants.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No merchants configured</TableCell></TableRow>}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="cashback" className="space-y-4">
-              <Card>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Amount</TableHead><TableHead>Date</TableHead><TableHead></TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {pendingEntries.map(e => (
-                        <TableRow key={e.id}>
-                          <TableCell>{(e as any).profiles?.display_name || "Unknown"}</TableCell>
-                          <TableCell className="font-medium">${Number(e.amount).toFixed(2)}</TableCell>
-                          <TableCell>{new Date(e.created_at).toLocaleDateString()}</TableCell>
-                          <TableCell><Button size="sm" onClick={() => approveCashback(e.id)}>Approve</Button></TableCell>
-                        </TableRow>
-                      ))}
-                      {pendingEntries.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No pending entries</TableCell></TableRow>}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+            <div className="space-y-1">
+              {merchants.map(m => (
+                <div key={m.id} className="flex items-center justify-between rounded-xl bg-secondary px-4 py-3">
+                  <div>
+                    <p className="text-[13px] font-medium text-foreground">{m.domain}</p>
+                    <p className="text-[11px] text-muted-foreground">{m.network || "—"} · {m.commission_rate ? `${m.commission_rate}%` : "—"}</p>
+                  </div>
+                  <button onClick={() => deleteMerchant(m.id)} className="text-[12px] text-destructive transition-opacity hover:opacity-70">Remove</button>
+                </div>
+              ))}
+              {merchants.length === 0 && <p className="py-8 text-center text-[13px] text-muted-foreground">No merchants</p>}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 space-y-1">
+            {pendingEntries.map(e => (
+              <div key={e.id} className="flex items-center justify-between rounded-xl bg-secondary px-4 py-3">
+                <div>
+                  <p className="text-[13px] font-medium text-foreground">${Number(e.amount).toFixed(2)}</p>
+                  <p className="text-[11px] text-muted-foreground">{(e as any).profiles?.display_name || "Unknown"}</p>
+                </div>
+                <button onClick={() => approveCashback(e.id)} className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-80">Approve</button>
+              </div>
+            ))}
+            {pendingEntries.length === 0 && <p className="py-8 text-center text-[13px] text-muted-foreground">No pending entries</p>}
+          </div>
         )}
       </div>
-    </AppLayout>
+    </ExtensionLayout>
   );
 }

@@ -1,19 +1,14 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { AppLayout } from "@/components/AppLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ExtensionLayout } from "@/components/ExtensionLayout";
 import { toast } from "@/hooks/use-toast";
-import { Upload, Trash2, AlertTriangle } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
 
 const CATEGORIES = [
-  { key: "full_body" as const, label: "Full Body", desc: "A full-length photo of yourself" },
-  { key: "face" as const, label: "Face", desc: "A clear photo of your face" },
-  { key: "hair" as const, label: "Hair", desc: "A photo showing your hairstyle" },
-  { key: "hands_wrist" as const, label: "Hands & Wrist", desc: "A photo of your hands/wrists" },
+  { key: "full_body" as const, label: "Full Body" },
+  { key: "face" as const, label: "Face" },
+  { key: "hair" as const, label: "Hair" },
+  { key: "hands_wrist" as const, label: "Hands" },
 ];
 
 type PhotoCategory = "full_body" | "face" | "hair" | "hands_wrist";
@@ -84,77 +79,60 @@ export default function Profile() {
     loadPhotos();
   };
 
-  const handleDeleteAccount = async () => {
-    if (!confirm("Are you sure? This will permanently delete all your data.")) return;
-    // Delete all user data
-    if (!user) return;
-    await supabase.from("wallet_ledger").delete().eq("user_id", user.id);
-    await supabase.from("click_events").delete().eq("user_id", user.id);
-    await supabase.from("tryon_requests").delete().eq("user_id", user.id);
-    for (const p of photos) {
-      await supabase.storage.from("profile-photos").remove([p.storage_path]);
-    }
-    await supabase.from("profile_photos").delete().eq("user_id", user.id);
-    await supabase.from("profiles").delete().eq("user_id", user.id);
-    await supabase.auth.signOut();
-    toast({ title: "Account data deleted" });
-  };
-
   return (
-    <AppLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Profile Photos</h1>
-          <p className="text-muted-foreground">Upload photos for virtual try-on</p>
-        </div>
+    <ExtensionLayout>
+      <div className="p-6">
+        <h1 className="text-[22px] font-semibold tracking-tight text-foreground">Your Photos</h1>
+        <p className="mt-1 text-[13px] text-muted-foreground">Upload photos for virtual try-on</p>
 
-        {loading ? (
-          <div className="grid gap-4 sm:grid-cols-2">{CATEGORIES.map(c => <Skeleton key={c.key} className="h-48" />)}</div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {CATEGORIES.map(cat => {
-              const photo = photos.find(p => p.category === cat.key);
-              return (
-                <Card key={cat.key}>
-                  <CardHeader>
-                    <CardTitle className="text-base">{cat.label}</CardTitle>
-                    <CardDescription>{cat.desc}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {photo?.signedUrl ? (
-                      <div className="space-y-2">
-                        <img src={photo.signedUrl} alt={cat.label} className="h-40 w-full rounded-md object-cover" />
-                        <div className="flex gap-2">
-                          <label className="flex-1">
-                            <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(cat.key, e.target.files[0])} />
-                            <Button variant="outline" size="sm" className="w-full" asChild><span><Upload className="mr-1 h-3.5 w-3.5" />Replace</span></Button>
-                          </label>
-                          <Button variant="destructive" size="sm" onClick={() => handleDelete(photo)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="flex h-32 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-border text-muted-foreground transition hover:border-primary hover:text-primary">
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          {CATEGORIES.map(cat => {
+            const photo = photos.find(p => p.category === cat.key);
+            return (
+              <div key={cat.key} className="group relative">
+                {loading ? (
+                  <div className="aspect-square animate-pulse rounded-xl bg-secondary" />
+                ) : photo?.signedUrl ? (
+                  <div className="relative">
+                    <img
+                      src={photo.signedUrl}
+                      alt={cat.label}
+                      className="aspect-square w-full rounded-xl object-cover"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-xl bg-foreground/0 opacity-0 transition-all group-hover:bg-foreground/40 group-hover:opacity-100">
+                      <label className="cursor-pointer rounded-lg bg-background/90 px-3 py-1.5 text-[11px] font-medium text-foreground transition-opacity hover:opacity-80">
                         <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(cat.key, e.target.files[0])} />
-                        {uploading === cat.key ? "Uploading…" : <><Upload className="mb-1 h-5 w-5" />Upload {cat.label}</>}
+                        Replace
                       </label>
+                      <button
+                        onClick={() => handleDelete(photo)}
+                        className="rounded-lg bg-destructive/90 px-3 py-1.5 text-[11px] font-medium text-destructive-foreground transition-opacity hover:opacity-80"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl bg-secondary text-muted-foreground transition-colors hover:bg-secondary/70">
+                    <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(cat.key, e.target.files[0])} />
+                    {uploading === cat.key ? (
+                      <span className="text-[12px]">Uploading…</span>
+                    ) : (
+                      <>
+                        <span className="text-[20px] leading-none">+</span>
+                        <span className="mt-1 text-[11px] font-medium">{cat.label}</span>
+                      </>
                     )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-
-        <Card className="border-destructive/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive"><AlertTriangle className="h-4 w-4" />Danger Zone</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-3 text-sm text-muted-foreground">This will permanently delete all your data including photos, try-on history, and wallet entries.</p>
-            <Button variant="destructive" onClick={handleDeleteAccount}>Delete My Data</Button>
-          </CardContent>
-        </Card>
+                  </label>
+                )}
+                {photo?.signedUrl && (
+                  <p className="mt-1.5 text-center text-[11px] font-medium text-muted-foreground">{cat.label}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </AppLayout>
+    </ExtensionLayout>
   );
 }

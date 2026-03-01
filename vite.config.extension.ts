@@ -1,35 +1,36 @@
 import { defineConfig } from "vite";
 import path from "path";
 
-// Builds content.ts and background.ts as IIFE bundles for the Chrome extension.
-// Run twice (once per entry) since IIFE format doesn't support multiple entry points.
-// Usage: called by the build:extension npm script
+// Build mode is determined by the ENTRY env var:
+//   ENTRY=content  → content.js
+//   ENTRY=background → background.js
 
-export const contentConfig = defineConfig({
+const entry = process.env.ENTRY || "content";
+
+const configs: Record<string, { entry: string; name: string; fileName: string }> = {
+  content: {
+    entry: path.resolve(__dirname, "src/extension/content.ts"),
+    name: "VTOContent",
+    fileName: "content.js",
+  },
+  background: {
+    entry: path.resolve(__dirname, "src/extension/background.ts"),
+    name: "VTOBackground",
+    fileName: "background.js",
+  },
+};
+
+const cfg = configs[entry];
+
+export default defineConfig({
   build: {
     emptyOutDir: false,
     outDir: "dist",
     lib: {
-      entry: path.resolve(__dirname, "src/extension/content.ts"),
-      name: "VTOContent",
-      fileName: () => "content.js",
+      entry: cfg.entry,
+      name: cfg.name,
+      fileName: () => cfg.fileName,
       formats: ["iife"],
     },
   },
 });
-
-export const backgroundConfig = defineConfig({
-  build: {
-    emptyOutDir: false,
-    outDir: "dist",
-    lib: {
-      entry: path.resolve(__dirname, "src/extension/background.ts"),
-      name: "VTOBackground",
-      fileName: () => "background.js",
-      formats: ["iife"],
-    },
-  },
-});
-
-// Default export builds the content script
-export default contentConfig;

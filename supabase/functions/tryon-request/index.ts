@@ -10,19 +10,19 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    const authHeader = req.headers.get("Authorization") ?? "";
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } }
+      { global: { headers: { Authorization: authHeader } } }
     );
 
     // Try to get user from JWT if provided, but don't require it
     let userId: string | null = null;
-    const authHeader = req.headers.get("Authorization");
-    if (authHeader?.startsWith("Bearer ")) {
+    if (authHeader.startsWith("Bearer ")) {
       const token = authHeader.replace("Bearer ", "");
-      const { data } = await supabase.auth.getClaims(token);
-      if (data?.claims?.sub) {
+      const { data, error } = await supabase.auth.getClaims(token);
+      if (!error && data?.claims?.sub) {
         userId = data.claims.sub as string;
       }
     }
@@ -34,8 +34,105 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "pageUrl and imageUrl required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Mock result: in production, call actual AI model here
-    const resultImageUrl = `https://placehold.co/400x600/7c3aed/white?text=VTO+Try-On`;
+    // --- AI Virtual Try-On via Lovable AI ---
+    // We use Gemini's image generation model to create a try-on composite.
+    // The user's profile photo (if available) + product image are described to the model.
+    let resultImageUrl: string | null = null;
+    let userPhotoUrl: string | null = null;
+
+    // If authenticated, try to get the user's full_body profile photo
+    if (userId) {
+      const serviceClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { data: photoData } = await serviceClient
+        .from("profile_photos")
+        .select("storage_path")
+        .eq("user_id", userId)
+        .eq("category", "full_body")
+        .limit(1)
+        .maybeSingle();
+
+      if (photoData?.storage_path) {
+        const { data: signedData } = await serviceClient.storage
+          .from("profile-photos")
+          .createSignedUrl(photoData.storage_path, 300);
+        userPhotoUrl = signedData?.signedUrl ?? null;
+      }
+    }
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      console.error("LOVABLE_API_KEY not configured");
+      // Fallback to placeholder
+      resultImageUrl = `https://placehold.co/400x600/7c3aed/white?text=AI+Not+Configured`;
+    } else {
+      // Build the prompt for AI image generation
+      const personDescription = userPhotoUrl
+        ? `Here is the person's photo: ${userPhotoUrl}. `
+        : "Use a generic fashion model as the person. ";
+
+      const prompt = `Generate a realistic virtual try-on image. ${personDescription}The product to try on is shown here: ${imageUrl}. ${title ? `The product is: ${title}.` : ""} Show the person wearing/using this product in a natural, photorealistic way. The result should look like a real photo, not a collage.`;
+
+      try {
+        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-3-pro-image-preview",
+            messages: [
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+          }),
+        });
+
+        if (aiResponse.ok) {
+          const aiData = await aiResponse.json();
+          // Check for inline image data in the response
+          const choice = aiData.choices?.[0];
+          if (choice?.message?.content) {
+            // The image model may return base64 inline_data or a URL
+            const content = choice.message.content;
+            if (Array.isArray(content)) {
+              // Multimodal response: look for image parts
+              const imagePart = content.find((p: any) => p.type === "image_url" || p.inline_data);
+              if (imagePart?.image_url?.url) {
+                resultImageUrl = imagePart.image_url.url;
+              } else if (imagePart?.inline_data) {
+                resultImageUrl = `data:${imagePart.inline_data.mime_type};base64,${imagePart.inline_data.data}`;
+              }
+            } else if (typeof content === "string" && content.startsWith("data:")) {
+              resultImageUrl = content;
+            }
+          }
+          // Also check for inline_data format from Gemini
+          const parts = aiData.choices?.[0]?.message?.parts;
+          if (!resultImageUrl && Array.isArray(parts)) {
+            const imgPart = parts.find((p: any) => p.inline_data);
+            if (imgPart?.inline_data) {
+              resultImageUrl = `data:${imgPart.inline_data.mime_type};base64,${imgPart.inline_data.data}`;
+            }
+          }
+        } else {
+          const errorText = await aiResponse.text();
+          console.error("AI gateway error:", aiResponse.status, errorText);
+        }
+      } catch (aiErr) {
+        console.error("AI try-on generation failed:", aiErr);
+      }
+    }
+
+    // Fallback if AI didn't produce an image
+    if (!resultImageUrl) {
+      resultImageUrl = `https://placehold.co/400x600/7c3aed/white?text=Try-On+Preview`;
+    }
 
     // Only save to DB if we have a user
     let tryOnId = crypto.randomUUID();

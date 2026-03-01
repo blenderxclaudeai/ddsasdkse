@@ -1,9 +1,77 @@
 // Content script — plain TS, no React/JSX, no imports from the app.
-// Injected on every page to scrape product data and show a "Try On" button.
+// Injected on every page; uses heuristics to detect product pages before showing the "Try On" button.
 
 (() => {
   // Avoid double-injection
   if (document.getElementById("vto-tryon-btn")) return;
+
+  // --------------- Product page detection ---------------
+
+  function isProductPage(): boolean {
+    // 1. Structured data (JSON-LD) with @type Product
+    const jsonLdScripts = document.querySelectorAll<HTMLScriptElement>('script[type="application/ld+json"]');
+    for (const script of jsonLdScripts) {
+      try {
+        const data = JSON.parse(script.textContent || "");
+        const types = Array.isArray(data) ? data : [data];
+        for (const item of types) {
+          if (item["@type"] === "Product" || item["@type"]?.includes?.("Product")) return true;
+          // Check @graph
+          if (Array.isArray(item["@graph"])) {
+            for (const g of item["@graph"]) {
+              if (g["@type"] === "Product" || g["@type"]?.includes?.("Product")) return true;
+            }
+          }
+        }
+      } catch { /* ignore malformed JSON-LD */ }
+    }
+
+    // 2. OpenGraph product meta tags
+    if (
+      document.querySelector('meta[property="og:type"][content="product"]') ||
+      document.querySelector('meta[property="product:price:amount"]') ||
+      document.querySelector('meta[property="og:price:amount"]')
+    ) return true;
+
+    // 3. Microdata product
+    if (document.querySelector('[itemtype*="schema.org/Product"]')) return true;
+
+    // 4. Common e-commerce signals in the DOM
+    const bodyText = document.body?.innerText?.slice(0, 5000)?.toLowerCase() || "";
+    const hasAddToCart = !!document.querySelector(
+      'button[name*="add"], button[class*="add-to-cart"], button[class*="addToCart"], [data-testid*="add-to-cart"], [data-testid*="addToCart"], form[action*="cart"]'
+    ) || bodyText.includes("add to cart") || bodyText.includes("add to bag");
+
+    const hasPriceElement = !!document.querySelector(
+      '[class*="price"], [data-testid*="price"], [itemprop="price"], .product-price'
+    );
+
+    // Need BOTH add-to-cart AND price to consider it a product page
+    if (hasAddToCart && hasPriceElement) return true;
+
+    // 5. Known retailer URL patterns
+    const path = window.location.pathname.toLowerCase();
+    const host = window.location.hostname.toLowerCase();
+    const productUrlPatterns = [
+      /\/product\//i, /\/products\//i, /\/item\//i, /\/p\//i,
+      /\/dp\//i, // Amazon
+      /\/-p-/i, // Trendyol
+    ];
+    if (productUrlPatterns.some(p => p.test(path))) return true;
+
+    // Known fashion/retail domains
+    const retailDomains = [
+      "zalando", "asos", "zara", "hm", "mango", "uniqlo", "nordstrom",
+      "farfetch", "net-a-porter", "ssense", "mytheresa", "shopbop",
+      "revolve", "amazon", "ebay", "etsy", "shein", "boohoo",
+      "prettylittlething", "nike", "adidas", "puma",
+    ];
+    if (retailDomains.some(d => host.includes(d)) && hasPriceElement) return true;
+
+    return false;
+  }
+
+  if (!isProductPage()) return;
 
   // --------------- Scraping helpers ---------------
 
@@ -15,15 +83,12 @@
   }
 
   function scrapeImage(): string | null {
-    // 1. OpenGraph image
     const ogImage = getMeta("og:image");
     if (ogImage) return ogImage;
-
-    // 2. Twitter card image
     const twImage = getMeta("twitter:image");
     if (twImage) return twImage;
 
-    // 3. Largest visible image on the page (likely the product hero)
+    // Largest visible image on the page (likely the product hero)
     let largest: HTMLImageElement | null = null;
     let largestArea = 0;
     document.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
@@ -37,26 +102,17 @@
   }
 
   function scrapeTitle(): string | null {
-    return (
-      getMeta("og:title") ??
-      getMeta("twitter:title") ??
-      document.title ??
-      null
-    );
+    return getMeta("og:title") ?? getMeta("twitter:title") ?? document.title ?? null;
   }
 
   function scrapePrice(): string | null {
-    return (
-      getMeta("product:price:amount") ??
-      getMeta("og:price:amount") ??
-      null
-    );
+    return getMeta("product:price:amount") ?? getMeta("og:price:amount") ?? null;
   }
 
   // --------------- Floating button ---------------
 
   const imageUrl = scrapeImage();
-  if (!imageUrl) return; // No product image found — probably not a product page
+  if (!imageUrl) return;
 
   const btn = document.createElement("button");
   btn.id = "vto-tryon-btn";
@@ -100,7 +156,6 @@
       },
     };
     chrome.runtime.sendMessage(productData);
-    // Brief feedback
     btn.textContent = "✓ Sent!";
     btn.style.background = "#16a34a";
     setTimeout(() => {

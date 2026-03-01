@@ -59,8 +59,6 @@ const CATEGORY_GROUPS = [
   },
 ] as const;
 
-type PhotoCategory = (typeof CATEGORY_GROUPS)[number]["categories"][number]["key"];
-
 interface PhotoRecord {
   id: string;
   category: string;
@@ -69,7 +67,7 @@ interface PhotoRecord {
 }
 
 export default function Profile() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -133,9 +131,9 @@ export default function Profile() {
 
   return (
     <ExtensionLayout>
-      <div className="flex h-full flex-col justify-between p-6">
+      <div className="flex h-full flex-col p-6">
         {/* Header */}
-        <div className="flex flex-col items-center pt-2 text-center">
+        <div className="flex flex-col items-center pt-4 text-center">
           <Avatar className="h-14 w-14">
             <AvatarImage src={avatarUrl} alt={displayName} />
             <AvatarFallback className="bg-secondary text-[15px] font-medium text-muted-foreground">
@@ -150,7 +148,7 @@ export default function Profile() {
         <div className="flex-1 overflow-hidden py-4">
           <p className="text-center text-[12px] text-muted-foreground">Your photos for virtual try-on</p>
           <Tabs defaultValue="you" className="mt-3">
-            <TabsList className="w-full justify-start overflow-x-auto">
+            <TabsList className="w-full justify-center">
               {CATEGORY_GROUPS.map(group => (
                 <TabsTrigger key={group.key} value={group.key} className="text-[12px]">
                   {group.label}
@@ -159,7 +157,7 @@ export default function Profile() {
             </TabsList>
 
             {CATEGORY_GROUPS.map(group => (
-              <TabsContent key={group.key} value={group.key} className="max-h-[300px] overflow-y-auto">
+              <TabsContent key={group.key} value={group.key} className="scrollbar-hide max-h-[300px] overflow-y-auto">
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   {group.categories.map(cat => {
                     const photo = photos.find(p => p.category === cat.key);
@@ -210,16 +208,6 @@ export default function Profile() {
               </TabsContent>
             ))}
           </Tabs>
-        </div>
-
-        {/* Footer */}
-        <div className="pb-2 text-center">
-          <button
-            onClick={signOut}
-            className="text-[11px] text-muted-foreground/60 transition-opacity hover:opacity-70"
-          >
-            Sign Out
-          </button>
         </div>
       </div>
     </ExtensionLayout>

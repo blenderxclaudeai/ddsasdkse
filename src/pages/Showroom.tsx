@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { ExtensionLayout } from "@/components/ExtensionLayout";
+import { ShoppingCart } from "lucide-react";
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 interface TryonResult {
   id: string;
@@ -12,6 +15,7 @@ interface TryonResult {
   created_at: string;
   retailer_domain: string | null;
   price: string | null;
+  page_url: string;
 }
 
 export default function Showroom() {
@@ -36,10 +40,13 @@ export default function Showroom() {
   const completedResults = results.filter(r => r.result_image_url);
   const pendingResults = results.filter(r => !r.result_image_url);
 
+  const getAffiliateUrl = (r: TryonResult) =>
+    `${SUPABASE_URL}/functions/v1/redirect?target=${encodeURIComponent(r.page_url)}&retailerDomain=${r.retailer_domain ?? ""}`;
+
   return (
     <ExtensionLayout>
       <div className="flex h-full flex-col p-8">
-        {/* Header — centered */}
+        {/* Header */}
         <div className="pt-2 text-center">
           <h1 className="text-[28px] font-semibold tracking-tight text-foreground">Showroom</h1>
           <p className="mt-1 text-[14px] text-muted-foreground">See how products look on you</p>
@@ -85,6 +92,15 @@ export default function Showroom() {
                           </div>
                         </div>
                       )}
+                      <a
+                        href={getAffiliateUrl(r)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                      >
+                        <ShoppingCart size={12} />
+                        Add to Cart
+                      </a>
                     </div>
                   ))}
                 </div>

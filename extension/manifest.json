@@ -2,11 +2,11 @@
   "manifest_version": 3,
   "name": "VTO — Virtual Try-On",
   "version": "1.0.0",
-  "description": "Try products on yourself before you buy. Browse any online store and see how clothes, glasses, jewelry, and more look on you.",
+  "description": "Try products on yourself before you buy. Browse any online store and see how items look on you.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": ["<all_urls>"],
   "action": {
-    "default_popup": "index.html"
+    "default_popup": "popup.html"
   },
   "background": {
     "service_worker": "background.js"
@@ -17,5 +17,8 @@
       "js": ["content.js"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }

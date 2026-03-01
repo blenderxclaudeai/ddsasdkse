@@ -19,11 +19,10 @@ serve(async (req) => {
 
     // Try to get user from JWT if provided, but don't require it
     let userId: string | null = null;
-    if (authHeader.startsWith("Bearer ")) {
-      const token = authHeader.replace("Bearer ", "");
-      const { data, error } = await supabase.auth.getClaims(token);
-      if (!error && data?.claims?.sub) {
-        userId = data.claims.sub as string;
+    if (authHeader.startsWith("Bearer ") && authHeader.length > 10) {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (!error && user) {
+        userId = user.id;
       }
     }
 

@@ -1,36 +1,48 @@
 
 
-## Expand Profile Categories
+## Changes Overview
 
-Final category groups: **You**, **Home**, **Pets**, **Vehicle**, **Garden/Outdoor**
+Multiple refinements across Profile, Showroom, and ExtensionLayout to fix scrollbar visibility, add settings, add "Add to Cart" affiliate button, and polish the design.
 
-### Database Migration
-Add new enum values to `photo_category`:
-- You: `hands`, `fingers`, `nails`, `hair`, `ears`
-- Home: `living_room`, `kitchen`, `bedroom`, `bathroom`, `office`
-- Pets: `dog`, `cat`
-- Vehicle: `car_interior`, `car_exterior`
-- Garden/Outdoor: `patio`, `garden`, `balcony`
+### 1. ExtensionLayout — hide scrollbar, add settings icon
 
-Remove old `lifestyle` value (or keep for backward compat — will check if any data uses it).
+- Remove `overflow-y-auto` from `<main>` and replace with `overflow-y-auto` plus a CSS utility to hide the scrollbar visually (using `scrollbar-hide` or inline styles with `-webkit-scrollbar: none` and `scrollbar-width: none`)
+- Add a settings gear icon (lucide `Settings`) in the top-left corner as a floating/absolute element inside the card
+- Clicking it opens a dropdown/popover with "Sign Out" and placeholder "Settings" option
+- Add a `/settings` route later, or just use a simple dropdown for now
 
-### Profile Page Update (`src/pages/Profile.tsx`)
-- Replace the flat 4-category grid with horizontal **Tabs** (You / Home / Pets / Vehicle / Garden)
-- Each tab shows a scrollable 2-column grid of its subcategories as upload slots
-- Keep the same upload/replace/delete UX per slot
-- Tabs use the existing `@radix-ui/react-tabs` component
+### 2. Profile page
 
-### Category Map (in code)
-```text
-You:      full_body, upper_body, face, hands, fingers, nails, hair, ears
-Home:     living_room, kitchen, bedroom, bathroom, office
-Pets:     dog, cat
-Vehicle:  car_interior, car_exterior
-Garden:   patio, garden, balcony
+- **Remove** the Sign Out button entirely (moved to settings icon in layout)
+- **Remove** `signOut` from the `useAuth` destructure in this file
+- **Center tabs properly** — the TabsList currently uses `justify-start`; change to `justify-center` or evenly spaced
+- **Hide scrollbar** on the tab content area (`max-h-[300px] overflow-y-auto` → add scrollbar-hide)
+- Clean up spacing to feel more balanced within the 600px card
+
+### 3. Showroom page
+
+- **Add "Add to Cart" button** on each completed result card — this button constructs the affiliate redirect URL using the existing `redirect` edge function: `${SUPABASE_URL}/functions/v1/redirect?target=${encodeURIComponent(r.page_url)}&retailerDomain=${r.retailer_domain}`
+- Opens in a new tab so the user lands back on the retailer's product page to add to cart
+- **Hide scrollbar** (same CSS fix via layout)
+- Polish spacing to match the cleaner design
+
+### 4. CSS — global scrollbar hide utility
+
+Add a `.scrollbar-hide` utility class in `src/index.css`:
+```css
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 ```
 
-### No Other Changes
-- No backend logic changes — upload flow stays the same
-- No new tables or RLS changes needed
-- Enum expansion is additive and non-breaking
+### 5. Settings dropdown in ExtensionLayout
+
+- Use a simple Popover or DropdownMenu (already installed via Radix) triggered by a gear icon
+- Contains "Sign Out" option (calls `signOut` from `useAuth`)
+- Positioned top-left of the card, inside the container
+
+### Files to modify
+- `src/index.css` — add scrollbar-hide utility
+- `src/components/ExtensionLayout.tsx` — add settings icon with dropdown, hide scrollbar on main
+- `src/pages/Profile.tsx` — remove Sign Out, center tabs, remove `signOut` import
+- `src/pages/Showroom.tsx` — add "Add to Cart" affiliate link button on results
 

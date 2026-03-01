@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "build:extension": "vite build && ENTRY=content vite build --config vite.config.extension.ts && ENTRY=background vite build --config vite.config.extension.ts",
+    "build:extension": "BUILD_TARGET=popup vite build --config extension/vite.config.ts && BUILD_TARGET=content vite build --config extension/vite.config.ts && BUILD_TARGET=background vite build --config extension/vite.config.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

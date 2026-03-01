@@ -1,14 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 
 export function ExtensionLayout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
-  const { user } = useAuth();
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40">
@@ -18,7 +11,7 @@ export function ExtensionLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
 
-        {/* Bottom tab bar */}
+        {/* Bottom tab bar — two tabs only */}
         <nav className="flex items-center justify-around border-t border-border px-2 py-3">
           <NavLink
             to="/profile"
@@ -44,12 +37,6 @@ export function ExtensionLayout({ children }: { children: React.ReactNode }) {
           >
             Showroom
           </NavLink>
-          <button
-            onClick={handleSignOut}
-            className="text-[13px] font-medium tracking-tight text-muted-foreground opacity-60 transition-opacity hover:opacity-100"
-          >
-            Sign Out
-          </button>
         </nav>
       </div>
     </div>

@@ -3,12 +3,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { ExtensionLayout } from "@/components/ExtensionLayout";
 import { toast } from "@/hooks/use-toast";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 const CATEGORIES = [
   { key: "full_body" as const, label: "Full Body" },
   { key: "face" as const, label: "Face" },
-  { key: "hair" as const, label: "Hair" },
-  { key: "hands_wrist" as const, label: "Hands" },
+  { key: "hair" as const, label: "Upper Body" },
+  { key: "hands_wrist" as const, label: "Lifestyle" },
 ];
 
 type PhotoCategory = "full_body" | "face" | "hair" | "hands_wrist";
@@ -21,7 +22,7 @@ interface PhotoRecord {
 }
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -79,13 +80,43 @@ export default function Profile() {
     loadPhotos();
   };
 
+  const avatarUrl = user?.user_metadata?.avatar_url;
+  const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || "User";
+  const email = user?.email;
+
   return (
     <ExtensionLayout>
       <div className="p-6">
-        <h1 className="text-[22px] font-semibold tracking-tight text-foreground">Your Photos</h1>
-        <p className="mt-1 text-[13px] text-muted-foreground">Upload photos for virtual try-on</p>
+        {/* User info header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-10 w-10">
+              <AvatarImage src={avatarUrl} alt={displayName} />
+              <AvatarFallback className="bg-secondary text-[13px] font-medium text-muted-foreground">
+                {displayName.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="truncate text-[14px] font-medium text-foreground">{displayName}</p>
+              <p className="truncate text-[12px] text-muted-foreground">{email}</p>
+            </div>
+          </div>
+          <button
+            onClick={signOut}
+            className="text-[12px] text-muted-foreground/60 transition-opacity hover:opacity-70"
+          >
+            Sign Out
+          </button>
+        </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3">
+        {/* Section title */}
+        <div className="mt-6">
+          <h2 className="text-[15px] font-medium text-foreground">Your Photos</h2>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">Upload photos for virtual try-on across all products</p>
+        </div>
+
+        {/* Photo grid */}
+        <div className="mt-4 grid grid-cols-2 gap-3">
           {CATEGORIES.map(cat => {
             const photo = photos.find(p => p.category === cat.key);
             return (

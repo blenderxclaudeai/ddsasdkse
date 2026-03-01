@@ -40,7 +40,7 @@ export default function Showroom() {
     <ExtensionLayout>
       <div className="p-6">
         <h1 className="text-[22px] font-semibold tracking-tight text-foreground">Showroom</h1>
-        <p className="mt-1 text-[13px] text-muted-foreground">Your virtual try-on results</p>
+        <p className="mt-1 text-[13px] text-muted-foreground">See how products look on you</p>
 
         {loading ? (
           <div className="mt-6 grid grid-cols-2 gap-3">
@@ -49,10 +49,13 @@ export default function Showroom() {
             ))}
           </div>
         ) : results.length === 0 ? (
-          <div className="mt-20 text-center">
-            <p className="text-[14px] text-muted-foreground">No try-ons yet</p>
-            <p className="mt-1 text-[12px] text-muted-foreground/60">
-              Use the browser extension to try on items
+          <div className="mt-16 flex flex-col items-center text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary">
+              <span className="text-[28px]">✨</span>
+            </div>
+            <p className="mt-4 text-[14px] font-medium text-foreground">Nothing here yet</p>
+            <p className="mt-1 max-w-[240px] text-[12px] leading-relaxed text-muted-foreground">
+              Browse any online store and try products on yourself — clothes, glasses, jewelry, furniture, and more.
             </p>
           </div>
         ) : (
@@ -66,10 +69,15 @@ export default function Showroom() {
                       alt={r.title || "Try-on result"}
                       className="aspect-[3/4] w-full rounded-xl object-cover"
                     />
-                    {(r.title || r.price) && (
+                    {(r.title || r.price || r.retailer_domain) && (
                       <div className="mt-1.5 px-0.5">
                         {r.title && <p className="truncate text-[12px] font-medium text-foreground">{r.title}</p>}
-                        {r.price && <p className="text-[11px] text-muted-foreground">{r.price}</p>}
+                        <div className="flex items-center gap-1.5">
+                          {r.price && <span className="text-[11px] text-muted-foreground">{r.price}</span>}
+                          {r.retailer_domain && (
+                            <span className="text-[10px] text-muted-foreground/50">{r.retailer_domain}</span>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

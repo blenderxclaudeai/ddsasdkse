@@ -171,7 +171,7 @@ serve(async (req) => {
 
     const promptText = `I'm providing two images. Image 1 is a photo of a person (the customer). Image 2 is a product listing photo — extract ONLY the product/item from it, ignore any model or mannequin shown. Generate a new realistic photo of the SAME person from Image 1, keeping their exact appearance unchanged, but wearing/using the product extracted from Image 2. Do not alter the person's face, skin, body, or identity in any way. Only add the product to them naturally with correct lighting and proportions.${title ? ` The product is: ${title}.` : ""}`;
 
-    const models = ["google/gemini-3-pro-image-preview", "google/gemini-2.5-flash"];
+    const models = ["google/gemini-3-pro-image-preview", "google/gemini-3-pro-image-preview"];
 
     for (const model of models) {
       try {

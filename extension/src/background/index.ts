@@ -4,18 +4,28 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  // Auth check
+  if (msg?.type === "VTO_GET_AUTH") {
+    chrome.storage.local.get("vto_auth_token", (result) => {
+      sendResponse({ loggedIn: !!result.vto_auth_token });
+    });
+    return true;
+  }
+
   if (msg?.type !== "VTO_TRYON_REQUEST") return;
 
   const { payload } = msg;
 
   (async () => {
     try {
-      // Get auth token from storage if user is logged in
-      let authToken = SUPABASE_ANON_KEY;
-      try {
-        const stored = await chrome.storage.local.get("vto_auth_token");
-        if (stored.vto_auth_token) authToken = stored.vto_auth_token;
-      } catch { /* use anon key */ }
+      // Get auth token
+      const stored = await chrome.storage.local.get("vto_auth_token");
+      const authToken = stored.vto_auth_token;
+
+      if (!authToken) {
+        sendResponse({ ok: false, error: "NOT_LOGGED_IN" });
+        return;
+      }
 
       const res = await fetch(`${SUPABASE_URL}/functions/v1/tryon-request`, {
         method: "POST",

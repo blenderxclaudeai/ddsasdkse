@@ -13,7 +13,6 @@ function scrapeImage(): string | null {
   const twImage = getMeta("twitter:image");
   if (twImage) return twImage;
 
-  // Fallback: largest visible image on the page
   let largest: HTMLImageElement | null = null;
   let largestArea = 0;
   document.querySelectorAll<HTMLImageElement>("img").forEach((img) => {

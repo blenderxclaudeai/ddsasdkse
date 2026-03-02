@@ -9,13 +9,12 @@ export default defineConfig(() => {
   return {
     plugins: [
       react(),
-      // After popup build, build content + background as IIFE bundles and copy manifest
       {
         name: "extension-post-build",
         async closeBundle() {
           const { build } = await import("vite");
 
-          // Build content script
+          // Build content script (IIFE)
           await build({
             configFile: false,
             envDir: path.resolve(__dirname, ".."),
@@ -38,7 +37,7 @@ export default defineConfig(() => {
             },
           });
 
-          // Build background service worker
+          // Build background service worker (IIFE)
           await build({
             configFile: false,
             envDir: path.resolve(__dirname, ".."),

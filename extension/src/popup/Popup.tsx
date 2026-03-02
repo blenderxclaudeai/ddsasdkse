@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@ext/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 
-/* ── Monochrome design system (inline, no Tailwind in popup) ── */
 const c = {
   bg: "#ffffff",
   bgCard: "#fafafa",
@@ -30,7 +29,6 @@ export function Popup() {
       const u = data.session?.user ?? null;
       setUser(u);
       setLoading(false);
-      // Store token for background worker
       if (data.session?.access_token) {
         chrome.storage.local.set({ vto_auth_token: data.session.access_token });
       }
@@ -67,11 +65,13 @@ export function Popup() {
     if (error) setAuthError(error.message);
   };
 
-  const handleSignOut = () => supabase.auth.signOut();
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    chrome.storage.local.remove(["vto_auth_token"]);
+  };
 
   if (loading) return <div style={s.container}><p style={{ color: c.fgMuted }}>Loading…</p></div>;
 
-  /* ── Auth screen ── */
   if (!user) {
     return (
       <div style={s.container}>
@@ -96,7 +96,6 @@ export function Popup() {
     );
   }
 
-  /* ── Logged-in dashboard ── */
   return (
     <div style={s.container}>
       <div style={s.header}>
@@ -106,11 +105,12 @@ export function Popup() {
         </div>
         <button style={s.btnGhost} onClick={handleSignOut}>Sign Out</button>
       </div>
-
       <div style={{ ...s.divider, margin: "12px 0" }} />
-
+      <a href={`https://ddsasdkse.lovable.app/showroom`} target="_blank" rel="noopener" style={s.btnPrimary as any}>
+        Open Showroom ↗
+      </a>
+      <div style={{ ...s.divider, margin: "12px 0" }} />
       <h2 style={s.sectionTitle}>Recent Try-Ons</h2>
-
       {requests.length === 0 ? (
         <p style={s.emptyText}>No try-ons yet. Visit a product page and click "Try On"!</p>
       ) : (
@@ -124,12 +124,10 @@ export function Popup() {
                 <p style={s.cardTitle}>{r.title || "Untitled"}</p>
                 <p style={s.cardMeta}>
                   <span style={{
-                    display: "inline-block",
-                    width: 6, height: 6,
+                    display: "inline-block", width: 6, height: 6,
                     borderRadius: "50%",
                     background: r.status === "completed" ? c.accent : c.fgDim,
-                    marginRight: 4,
-                    verticalAlign: "middle",
+                    marginRight: 4, verticalAlign: "middle",
                   }} />
                   {r.status}
                 </p>
@@ -138,24 +136,13 @@ export function Popup() {
           ))}
         </div>
       )}
-
       <p style={s.disclosure}>We may earn affiliate commission from purchases.</p>
     </div>
   );
 }
 
-/* ── Styles ── */
 const s: Record<string, React.CSSProperties> = {
-  container: {
-    width: 380,
-    minHeight: 420,
-    padding: 20,
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif',
-    background: c.bg,
-    color: c.fg,
-    fontSize: 13,
-    lineHeight: 1.5,
-  },
+  container: { width: 380, minHeight: 420, padding: 20, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif', background: c.bg, color: c.fg, fontSize: 13, lineHeight: 1.5 },
   logoRow: { display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 },
   logo: { fontSize: 20, fontWeight: 700, letterSpacing: "-0.03em" },
   version: { fontSize: 11, color: c.fgDim, fontWeight: 500 },
@@ -165,38 +152,15 @@ const s: Record<string, React.CSSProperties> = {
   sectionTitle: { fontSize: 13, fontWeight: 600, margin: "0 0 8px", letterSpacing: "-0.01em" },
   emptyText: { fontSize: 12, color: c.fgMuted, margin: 0 },
   list: { display: "flex", flexDirection: "column", gap: 8 },
-  card: {
-    display: "flex", gap: 10, padding: 10, borderRadius: 10,
-    background: c.bgCard, border: `1px solid ${c.border}`, alignItems: "center",
-  },
+  card: { display: "flex", gap: 10, padding: 10, borderRadius: 10, background: c.bgCard, border: `1px solid ${c.border}`, alignItems: "center" },
   cardImg: { width: 44, height: 44, objectFit: "cover", borderRadius: 8, flexShrink: 0 },
-  cardTitle: {
-    fontSize: 13, fontWeight: 500, margin: 0,
-    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-  },
+  cardTitle: { fontSize: 13, fontWeight: 500, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   cardMeta: { fontSize: 11, color: c.fgMuted, margin: "2px 0 0" },
   form: { display: "flex", flexDirection: "column", gap: 8 },
-  input: {
-    padding: "9px 12px", borderRadius: 8, border: `1px solid ${c.border}`,
-    background: c.bg, color: c.fg, fontSize: 13, outline: "none",
-    transition: "border-color 0.15s",
-  },
-  btnPrimary: {
-    padding: "9px 12px", borderRadius: 8, border: "none",
-    background: c.primary, color: c.primaryFg, fontWeight: 600,
-    fontSize: 13, cursor: "pointer", marginTop: 4,
-  },
-  btnGhost: {
-    background: "none", border: "none", color: c.fgMuted,
-    cursor: "pointer", fontSize: 12, fontWeight: 500, padding: "4px 8px",
-  },
-  link: {
-    background: "none", border: "none", color: c.fgMuted,
-    cursor: "pointer", fontSize: 12, textAlign: "center" as const,
-    textDecoration: "underline",
-  },
+  input: { padding: "9px 12px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.bg, color: c.fg, fontSize: 13, outline: "none" },
+  btnPrimary: { display: "block", padding: "9px 12px", borderRadius: 8, border: "none", background: c.primary, color: c.primaryFg, fontWeight: 600, fontSize: 13, cursor: "pointer", marginTop: 4, textAlign: "center" as const, textDecoration: "none" },
+  btnGhost: { background: "none", border: "none", color: c.fgMuted, cursor: "pointer", fontSize: 12, fontWeight: 500, padding: "4px 8px" },
+  link: { background: "none", border: "none", color: c.fgMuted, cursor: "pointer", fontSize: 12, textAlign: "center" as const, textDecoration: "underline" },
   error: { fontSize: 12, color: c.danger, margin: 0 },
-  disclosure: {
-    fontSize: 10, color: c.fgDim, textAlign: "center" as const, marginTop: 20,
-  },
+  disclosure: { fontSize: 10, color: c.fgDim, textAlign: "center" as const, marginTop: 20 },
 };

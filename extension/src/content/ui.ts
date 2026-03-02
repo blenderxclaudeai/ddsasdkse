@@ -1,10 +1,8 @@
-// UI injection: floating button + preview modal
 import type { TryOnResponse } from "@ext/lib/types";
 
 const BUTTON_ID = "vto-tryon-btn";
+const PILL_ID = "vto-login-pill";
 const MODAL_ID = "vto-modal-overlay";
-
-// ── Floating Button ──
 
 export function injectButton(onClick: () => void): HTMLButtonElement {
   const existing = document.getElementById(BUTTON_ID) as HTMLButtonElement | null;
@@ -31,46 +29,60 @@ export function injectButton(onClick: () => void): HTMLButtonElement {
     transition: "transform 0.15s ease, box-shadow 0.15s ease",
   });
 
-  btn.addEventListener("mouseenter", () => {
-    btn.style.transform = "scale(1.05)";
-  });
-  btn.addEventListener("mouseleave", () => {
-    btn.style.transform = "scale(1)";
-  });
+  btn.addEventListener("mouseenter", () => { btn.style.transform = "scale(1.05)"; });
+  btn.addEventListener("mouseleave", () => { btn.style.transform = "scale(1)"; });
   btn.addEventListener("click", onClick);
   document.body.appendChild(btn);
   return btn;
 }
 
-// ── Modal ──
+export function injectLoginPill(): void {
+  if (document.getElementById(PILL_ID)) return;
+  const pill = document.createElement("div");
+  pill.id = PILL_ID;
+  pill.textContent = "🔒 Log in to VTO to try on";
+  Object.assign(pill.style, {
+    position: "fixed",
+    bottom: "24px",
+    right: "24px",
+    zIndex: "2147483647",
+    padding: "8px 16px",
+    borderRadius: "20px",
+    background: "#f5f5f5",
+    color: "#737373",
+    fontSize: "12px",
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+    cursor: "pointer",
+  });
+  pill.addEventListener("click", () => {
+    // Opens the extension popup (user needs to click the icon)
+    pill.textContent = "Click the VTO icon in toolbar ↗";
+    setTimeout(() => { pill.textContent = "🔒 Log in to VTO to try on"; }, 3000);
+  });
+  document.body.appendChild(pill);
+}
+
+export function removeLoginPill(): void {
+  document.getElementById(PILL_ID)?.remove();
+}
 
 export function showModal() {
   removeModal();
-
   const overlay = document.createElement("div");
   overlay.id = MODAL_ID;
   Object.assign(overlay.style, {
-    position: "fixed",
-    inset: "0",
-    zIndex: "2147483647",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    position: "fixed", inset: "0", zIndex: "2147483647",
+    display: "flex", alignItems: "center", justifyContent: "center",
     background: "rgba(0,0,0,0.6)",
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   });
 
   const card = document.createElement("div");
   Object.assign(card.style, {
-    background: "#fff",
-    borderRadius: "16px",
-    padding: "24px",
-    width: "380px",
-    maxHeight: "80vh",
-    overflow: "auto",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-    textAlign: "center",
-    color: "#171717",
+    background: "#fff", borderRadius: "16px", padding: "24px",
+    width: "380px", maxHeight: "80vh", overflow: "auto",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.3)", textAlign: "center", color: "#171717",
   });
   card.innerHTML = `
     <h2 style="margin:0 0 4px;font-size:18px;font-weight:700;">VTO Preview</h2>
@@ -79,17 +91,11 @@ export function showModal() {
       <div style="width:32px;height:32px;border:3px solid #e5e5e5;border-top-color:#171717;border-radius:50%;animation:vto-spin 0.8s linear infinite;"></div>
     </div>
   `;
-
-  // Add spinner keyframes
   const style = document.createElement("style");
   style.textContent = `@keyframes vto-spin{to{transform:rotate(360deg)}}`;
   card.appendChild(style);
 
-  // Close on overlay click
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) removeModal();
-  });
-
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) removeModal(); });
   overlay.appendChild(card);
   document.body.appendChild(overlay);
 }
@@ -97,7 +103,6 @@ export function showModal() {
 export function updateModalSuccess(result: TryOnResponse) {
   const body = document.getElementById("vto-modal-body");
   if (!body) return;
-
   if (result.resultImageUrl) {
     body.innerHTML = `
       <div style="width:100%;">
@@ -119,7 +124,6 @@ export function updateModalSuccess(result: TryOnResponse) {
 export function updateModalError(errorMsg: string) {
   const body = document.getElementById("vto-modal-body");
   if (!body) return;
-
   body.innerHTML = `
     <div>
       <p style="font-size:14px;color:#dc2626;margin:0 0 8px;">Something went wrong</p>

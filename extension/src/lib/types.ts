@@ -15,3 +15,7 @@ export interface TryOnMessage {
   type: "VTO_TRYON_REQUEST";
   payload: ProductData;
 }
+
+export interface AuthMessage {
+  type: "VTO_GET_AUTH";
+}

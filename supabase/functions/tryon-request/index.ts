@@ -439,7 +439,17 @@ CRITICAL RULES:
             console.log(`Step 2 success on attempt ${attempt + 1}`);
             break;
           }
-          console.error(`Step 2 attempt ${attempt + 1}: no image. Refusal:`, JSON.stringify(message?.refusal));
+          // Diagnostics: log full response structure when no image found
+          const contentTypes = Array.isArray(message?.content)
+            ? message.content.map((p: any) => p.type)
+            : [typeof message?.content];
+          const textContent = Array.isArray(message?.content)
+            ? message.content.filter((p: any) => p.type === "text").map((p: any) => p.text).join(" ")
+            : (typeof message?.content === "string" ? message.content : "");
+          console.error(`Step 2 attempt ${attempt + 1}: no image. Refusal:`, JSON.stringify(message?.refusal),
+            `Content types:`, JSON.stringify(contentTypes),
+            `Text content:`, textContent.slice(0, 500),
+            `Message keys:`, JSON.stringify(Object.keys(message || {})));
         } else {
           console.error(`Step 2 attempt ${attempt + 1} error:`, aiResponse.status, await aiResponse.text());
         }
@@ -454,7 +464,7 @@ CRITICAL RULES:
     if (!resultImageUrl) {
       const errorMsg = typeof aiRefusal === "string" && aiRefusal
         ? `The AI declined: ${aiRefusal}`
-        : "This product couldn't be visualized. Try a different photo or product.";
+        : "The AI model's safety filters blocked this try-on. This can happen when the AI detects differences in gender or ethnicity between you and the product image — a limitation of the current AI model, not something we agree with. We're working on it. Please try a different product or photo.";
       return new Response(JSON.stringify({ error: errorMsg }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

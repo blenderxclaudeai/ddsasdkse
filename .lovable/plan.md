@@ -1,28 +1,51 @@
 
 
-## Problem
+## Issues Identified
 
-The screenshot shows the **deployed** login page at `ddsasdkse.lovable.app/login` has email/password fields, "or" divider, and "Sign Up" link. But the **current code** in `Login.tsx` only has Google and Apple buttons — no email/password form at all.
+1. **Try On button not appearing after login**: The `webAppSync.ts` content script checks for `sb-*-auth-token` in localStorage, but `@lovable.dev/cloud-auth-js` may store the session under a different key. Also, the script sends the session to background, but the content script on retailer pages checks auth via `VTO_GET_AUTH` message -- this part looks correct, so the issue is likely in `webAppSync.ts` not finding the session key.
 
-This means the **published site is stale** — it hasn't been re-published since the Login page was updated. The code is correct; it just needs to be deployed.
+2. **Try-on only uses `full_body` photo**: The edge function hardcodes `category = "full_body"`. It needs to accept a `category` param from the content script and match the product type to the correct profile photo (e.g., ring -> fingers, necklace -> upper_body).
 
-Additionally, after completing Google OAuth, the session isn't being detected and the user stays on the login page. The auth logs confirm the Google login succeeds (HTTP 200), so the issue is on the client side — the OAuth return isn't being processed.
+3. **No "missing photo" error handling**: If the user hasn't uploaded the matching photo category, the try-on silently falls back to a generic model instead of telling the user which photo they need.
 
-### Root cause of "nothing happens after login"
+4. **Emojis in UI**: `"Try On"` button has sparkle emoji, login pill has lock emoji, showroom empty state has sparkle emoji, "Add to Cart" has cart emoji, and there's a duplicate `const initial` line causing a build error.
 
-The `redirect_uri` is set to `window.location.origin` (i.e. `https://ddsasdkse.lovable.app`). After OAuth, the browser returns to `/` which immediately `<Navigate to="/profile" />`. The `ProtectedRoute` checks `user` — but the Supabase session hasn't been processed yet (race condition), so it bounces back to `/login` without the OAuth tokens in the URL anymore.
+5. **Duplicate variable in Popup.tsx**: Line 361-362 has `const initial = ...` declared twice -- this will cause a build error.
 
 ## Plan
 
-### 1. Re-publish the app
-The login page code is already correct (Google + Apple only). It just needs to be published so the deployed site matches.
+### 1. Fix `webAppSync.ts` session detection
+The Lovable auth module may not use standard `sb-*-auth-token` localStorage keys. Add fallback detection: also look for any key containing `supabase` or `auth-token`, and also listen to `onAuthStateChange`-style events by polling more aggressively. Additionally, the `@lovable.dev/cloud-auth-js` module stores auth differently -- read the actual localStorage keys after OAuth completes.
 
-### 2. Fix OAuth redirect to prevent race condition
-In `Login.tsx`, change `redirect_uri` from `window.location.origin` to `window.location.origin + "/login"`. This ensures the OAuth return lands back on the login page, where `useAuth`'s `onAuthStateChange` can detect the new session and then the existing `if (user) return <Navigate to="/profile" />` kicks in properly.
+### 2. Fix content script `content/index.ts` -- add product category detection
+Extend `extractProduct()` to detect the product category (clothing, ring, glasses, furniture, etc.) using page signals like JSON-LD product type, title keywords, and meta tags. Pass the category to the background try-on request.
 
-```typescript
-redirect_uri: window.location.origin + "/login",
-```
+### 3. Update `tryon-request` edge function
+- Accept a `category` parameter from the request body
+- Map category to the correct profile photo (e.g., `ring` -> `fingers`, `glasses` -> `face`, `shirt` -> `upper_body`, `sofa` -> `living_room`)
+- If no matching photo exists, return a clear error: `"Please upload a photo of your [hands/face/etc.] in your VTO profile to try on this product"`
 
-That single change should fix both issues — the page just needs to be republished.
+### 4. Remove all emojis from UI
+- `ui.ts`: Remove sparkle from "Try On" button, lock from login pill
+- `Popup.tsx`: Remove sparkle from showroom empty state, cart emoji from "Add to Cart"
+- Fix the duplicate `const initial` line
+
+### 5. Update `productExtract.ts` to detect product category
+Add heuristics to determine what kind of product is on the page (jewelry, clothing, home decor, etc.) and include it in the `ProductData` type.
+
+### 6. Update error handling in content script modal
+- Show specific error messages when a profile photo is missing
+- Show a link/instruction to open the extension popup and upload the required photo
+
+## Files to change
+
+- **`extension/src/content/webAppSync.ts`** -- fix session key detection
+- **`extension/src/content/ui.ts`** -- remove emojis, improve error messages
+- **`extension/src/content/productExtract.ts`** -- add category detection
+- **`extension/src/lib/types.ts`** -- add `category` field to `ProductData`
+- **`extension/src/content/index.ts`** -- pass category to try-on request
+- **`extension/src/background/index.ts`** -- pass category to edge function
+- **`extension/src/popup/Popup.tsx`** -- remove emojis, fix duplicate variable
+- **`supabase/functions/tryon-request/index.ts`** -- accept category, map to correct profile photo, return missing-photo error
+- **`src/pages/Showroom.tsx`** -- remove emojis if any
 

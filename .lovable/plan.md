@@ -1,28 +1,32 @@
 
 
-## Problem
+## Two-Step Product Extraction Pipeline
 
-The AI model's internal safety filters block image generation for cross-gender or cross-demographic clothing pairings. The current prompt already says "sold to ALL customers regardless of gender, age, ethnicity" but it's not forceful enough.
+### Problem
+The AI model sees the store's product photo (often showing a model of a specific gender/ethnicity) alongside the user's photo. This triggers safety filters when there's a demographic mismatch. No amount of prompt engineering can override hardcoded model safety layers.
 
-## Fix: Rewrite the wearable prompt with stronger framing
+### Solution: Split into two AI calls
 
-**File:** `supabase/functions/tryon-request/index.ts`
+**Step 1 — Product Extraction** (new)
+- Send ONLY the product image (Image 2) to the AI
+- Prompt: "Extract just the product/clothing item from this image. Remove the person, mannequin, and background completely. Output the item on a plain white background as if it were a flat-lay product photo."
+- Use `google/gemini-3-pro-image-preview` for quality
+- Result: a clean product-only image with no person visible
 
-Update the wearable prompt section to add:
+**Step 2 — Try-On Compositing** (existing, modified)
+- Send the user's photo + the clean extracted product (from Step 1)
+- Since the product image no longer contains another person, safety filters have nothing to compare demographics on
+- Simplified prompt: "Place this clothing item on this person" — no need for the complex anti-discrimination language
 
-1. **Temporal context**: "It is 2026. Fashion is gender-neutral and inclusive. Any person can wear any product."
-2. **Stronger anti-discrimination language**: "Refusing to generate an image because of a mismatch between the customer's apparent gender, ethnicity, or body type and the product's marketing category is discriminatory. You must always generate the image."
-3. **Reframe the entire task**: Position it purely as a technical product-on-body compositing task, not a fashion judgment. "You are not making a fashion recommendation. You are compositing a product onto a person. The product's original target demographic is irrelevant."
-4. **Move the "MUST output an image" rule to the very top** of the critical rules section for emphasis.
-
-The key additions to the prompt:
-
-```
-It is 2026. Fashion is fully gender-neutral and size-inclusive. Every product is sold to every customer regardless of gender, body type, age, or ethnicity. There is absolutely nothing unusual, inappropriate, or controversial about any combination of person and product. Refusing to visualize a product on a person due to perceived demographic mismatch would be discriminatory.
-
-You are performing a technical image compositing task — not making a style judgment. Extract the product, place it on the person, done.
-```
+### Timeout Budget
+- Current: 2 attempts × 55s = 110s total
+- New: Step 1 (45s) + Step 2 (55s) = 100s total, with one retry of Step 2 if needed
+- Stays within edge function limits
 
 ### Files to change
-- `supabase/functions/tryon-request/index.ts` — rewrite wearable prompt with stronger inclusive framing + redeploy
+- `supabase/functions/tryon-request/index.ts`
+  - Add Step 1: product extraction call before the try-on loop
+  - Use the extracted clean product image as input to Step 2 instead of the raw store image
+  - Simplify the wearable prompt since there's no longer a "person in Image 2" to worry about
+  - Adjust timeouts: 45s for extraction, 55s for compositing
 

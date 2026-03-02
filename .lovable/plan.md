@@ -2,24 +2,26 @@
 
 ## Problem
 
-The edge function logs show the exact error:
+The logs show: `AI returned no image. Response structure: ["role","content","refusal","reasoning","reasoning_details","annotations"]`
 
-```
-Unsupported image format for URL: https://yidfawmlhjltclnzfyuz.supabase.co/storage/v1/object/sign/profile-photos/.../full_body-1772467064559
-Supported formats: PNG, JPEG, WebP, GIF. For other formats, use a data URL with the MIME type specified.
-```
+Two issues:
 
-The signed URL for the profile photo has **no file extension** (e.g., `full_body-1772467064559` instead of `full_body-1772467064559.png`). The AI gateway cannot determine the image format from the URL alone and rejects it.
+1. **Product image URL not accessible to AI gateway**: The `imageUrl` from the retailer (e.g., Zalando) is passed as a raw URL. The AI gateway may not be able to fetch it (CORS, auth cookies, CDN restrictions). The user photo was already fixed by converting to base64 — the product image needs the same treatment.
 
-## Fix
+2. **Response parsing incomplete**: The AI response has a `content` field but no `images` array. The image might be embedded inline in `content` (as a multimodal content array with `image_url` parts) rather than in a separate `images` field. The code only checks `message.images` and misses this.
 
-In `supabase/functions/tryon-request/index.ts`, instead of passing the signed URL directly to the AI gateway, **fetch the image bytes from storage and convert to a base64 data URL** with the correct MIME type. This guarantees the AI gateway knows the format.
+## Plan
 
-Steps:
-1. After getting the signed URL, fetch the image binary from it
-2. Detect the content-type from the response headers (or default to `image/jpeg`)
-3. Convert to `data:image/jpeg;base64,...` format
-4. Pass the data URL to the AI gateway instead of the signed URL
+### Update `supabase/functions/tryon-request/index.ts`
+
+1. **Convert product image to base64**: Before sending to the AI, fetch the product image URL and convert it to a `data:` URI, just like the user photo. This ensures the AI gateway can actually see both images.
+
+2. **Expand response parsing**: Check multiple locations for the generated image:
+   - `message.images[0].image_url.url` (current check)
+   - `message.content` as an array — look for parts with `type: "image_url"`
+   - `message.content` as a string — check if it contains a base64 data URI
+
+3. **Add detailed logging**: Log the actual `content` value (truncated) when no image is found, so we can see exactly what the model returns.
 
 ### File to change
 - `supabase/functions/tryon-request/index.ts`

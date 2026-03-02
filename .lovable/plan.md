@@ -2,22 +2,34 @@
 
 ## Problem
 
-The manifest declares `"default_popup": "popup.html"` but the Vite popup build outputs the file as `index.html` (Rollup preserves the original filename from `src/popup/index.html`). Chrome cannot find `popup.html` → ERR_FILE_NOT_FOUND.
+The extension popup (`extension/src/popup/Popup.tsx`) renders an email/password login form (image-6), but the project only supports Google and Apple OAuth (image-7). The popup auth should not have its own login form — it should direct users to the web app to sign in via OAuth, then sync the session back.
 
-## Fix
+## Why email/password won't work
 
-Two small changes:
+Chrome extension popups cannot handle OAuth redirects. The `lovable.auth.signInWithOAuth()` flow redirects the browser, which closes the popup. The correct pattern is:
 
-1. **Rename the popup output to match the manifest.** In `extension/vite.config.ts`, add a post-build step (or Rollup plugin) that renames `dist/index.html` → `dist/popup.html` after the popup build completes. Alternatively, change the manifest to `"default_popup": "index.html"` — but `popup.html` is the clearer convention, so renaming is preferred.
+1. User signs in via the **web app** (Google/Apple OAuth)
+2. The extension detects the session (already implemented via `chrome.storage.local` token sync)
+3. The popup shows logged-in state
 
-2. **Remove stale root-level files.** Delete the legacy plain-JS files that sit directly in `/extension` and could mislead someone into loading the wrong folder:
-   - `extension/background.js`
-   - `extension/content.js`
-   - `extension/index.html`
+## Plan
 
-   These are old hand-written stubs; the real built files go into `extension/dist/`.
+### 1. Redesign the logged-out popup state
 
-3. **Also remove the duplicate source files** `extension/src/background.ts` and `extension/src/content.ts` which are unused (the real entry points are in `extension/src/background/index.ts` and `extension/src/content/index.ts`).
+Replace the email/password form in `Popup.tsx` with:
+- VTO header + "Try before you buy" tagline (matching web app style)
+- A single **"Sign in on VTO"** button that opens the web app login page in a new tab (`chrome.tabs.create({ url: ... })`)
+- Disclosure text at the bottom
 
-No other changes needed — the manifest patterns, build pipeline, and source code are otherwise correct.
+Remove `email`, `password`, `authMode`, `authError` state and the `handleAuth` function entirely.
+
+### 2. Keep the logged-in state as-is
+
+The authenticated view (showroom link, recent try-ons, sign out) is already correct and stays unchanged.
+
+### Technical detail
+
+- The "Sign in" button calls `chrome.tabs.create({ url: "${APP_URL}/login" })` to open the web app
+- Once the user completes OAuth on the web app, the existing `onAuthStateChange` listener in the popup will pick up the session on next popup open
+- The extension's `supabase` client will detect the session if the user has already logged in on the web app domain
 

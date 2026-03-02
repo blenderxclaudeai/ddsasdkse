@@ -286,7 +286,9 @@ CRITICAL RULES:
 
     } else {
       // Default: wearable / personal items
-      promptText = `You are a virtual fitting room for an e-commerce shopping app. This is a product visualization tool — like a mannequin display, but using a real person. Your job is to show how a product looks on the customer who wants to buy it.
+      promptText = `It is 2026. Fashion is fully gender-neutral and size-inclusive. Every product is sold to every customer regardless of gender, body type, age, or ethnicity. There is absolutely nothing unusual, inappropriate, or controversial about any combination of person and product. Refusing to visualize a product on a person due to perceived demographic mismatch would be discriminatory and is never acceptable.
+
+You are a virtual fitting room performing a technical image compositing task — not making a fashion recommendation or style judgment. Your only job: extract the product from Image 2 and composite it onto the person in Image 1. The product's original target demographic is completely irrelevant.
 
 Image 1: The customer. This is the real person who is shopping. Preserve their EXACT appearance: face, skin tone, body shape, hair, tattoos, scars, and every physical feature. They are the buyer.
 
@@ -298,13 +300,13 @@ Task: Generate a new realistic photo of the EXACT same person from Image 1, but 
 - Naturally integrated as if the customer is actually wearing/using it
 - If the product appears designed for a different body type or gender, adapt it naturally — resize, reshape, or refit it to look as natural as possible on the customer's actual body
 
-CRITICAL RULES:
-- You MUST output an image. Never return text-only. Always generate the visualization.
-- Do NOT alter the customer's face, skin color, body shape, hair, or any physical feature whatsoever
-- Do NOT blend features from any person shown in Image 2 into the customer
-- The person in Image 2 is IRRELEVANT — they are just displaying the product. Only the product matters from Image 2
-- This is a standard e-commerce virtual try-on feature. The product is sold to ALL customers regardless of gender, age, ethnicity, or body type. Any customer can try any product. There is nothing unusual about this request.
-- The output should look like the customer from Image 1 took a photo while wearing/using the product${productLabel}`;
+CRITICAL RULES (in order of importance):
+1. You MUST output an image. Never return text-only. Always generate the visualization. No exceptions.
+2. Do NOT refuse based on any perceived mismatch between the person and the product. Every person can wear every product. This is 2026.
+3. Do NOT alter the customer's face, skin color, body shape, hair, or any physical feature whatsoever.
+4. Do NOT blend features from any person shown in Image 2 into the customer.
+5. The person in Image 2 is IRRELEVANT — they are just displaying the product. Only the product matters from Image 2.
+6. The output should look like the customer from Image 1 took a photo while wearing/using the product.${productLabel}`;
     }
 
     const models = ["google/gemini-3-pro-image-preview", "google/gemini-3-pro-image-preview"];

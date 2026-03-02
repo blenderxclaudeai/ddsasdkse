@@ -169,72 +169,72 @@ serve(async (req) => {
       });
     }
 
-    const promptText = `You are a fashion and lifestyle visualization assistant. I'm providing two images: a reference photo showing a person (or space), and a product photo. Create a new composite image that realistically shows how this product would look when styled on someone with a similar appearance (or placed in a similar space). ${title ? `The product is: ${title}.` : ""} Focus on realistic lighting, proportions, and natural integration. The output should look like a professional product photo.`;
+    const promptText = `I'm providing two images. Image 1 is a photo of a person (the customer). Image 2 is a product listing photo — extract ONLY the product/item from it, ignore any model or mannequin shown. Generate a new realistic photo of the SAME person from Image 1, keeping their exact appearance unchanged, but wearing/using the product extracted from Image 2. Do not alter the person's face, skin, body, or identity in any way. Only add the product to them naturally with correct lighting and proportions.${title ? ` The product is: ${title}.` : ""}`;
 
-    try {
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-pro-image-preview",
-          modalities: ["image", "text"],
-          messages: [{
-            role: "user",
-            content: [
-              { type: "text", text: promptText },
-              { type: "image_url", image_url: { url: userPhotoUrl } },
-              { type: "image_url", image_url: { url: productImageDataUrl } },
-            ],
-          }],
-        }),
-      });
+    const models = ["google/gemini-3-pro-image-preview", "google/gemini-2.5-flash"];
 
-      if (aiResponse.ok) {
-        const aiData = await aiResponse.json();
-        const message = aiData.choices?.[0]?.message;
-        aiRefusal = message?.refusal || null;
+    for (const model of models) {
+      try {
+        console.log(`Trying model: ${model}`);
+        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            modalities: ["image", "text"],
+            messages: [{
+              role: "user",
+              content: [
+                { type: "text", text: promptText },
+                { type: "image_url", image_url: { url: userPhotoUrl } },
+                { type: "image_url", image_url: { url: productImageDataUrl } },
+              ],
+            }],
+          }),
+        });
 
-        // Check 1: images array
-        if (message?.images?.[0]?.image_url?.url) {
-          resultImageUrl = message.images[0].image_url.url;
-        }
+        if (aiResponse.ok) {
+          const aiData = await aiResponse.json();
+          const message = aiData.choices?.[0]?.message;
+          aiRefusal = message?.refusal || null;
 
-        // Check 2: content as array with image_url parts
-        if (!resultImageUrl && Array.isArray(message?.content)) {
-          for (const part of message.content) {
-            if (part.type === "image_url" && part.image_url?.url) {
-              resultImageUrl = part.image_url.url;
-              break;
+          if (message?.images?.[0]?.image_url?.url) {
+            resultImageUrl = message.images[0].image_url.url;
+          }
+
+          if (!resultImageUrl && Array.isArray(message?.content)) {
+            for (const part of message.content) {
+              if (part.type === "image_url" && part.image_url?.url) {
+                resultImageUrl = part.image_url.url;
+                break;
+              }
             }
           }
-        }
 
-        // Check 3: content as string containing base64 data URI
-        if (!resultImageUrl && typeof message?.content === "string") {
-          const dataUriMatch = message.content.match(/data:image\/[a-zA-Z+]+;base64,[A-Za-z0-9+/=]+/);
-          if (dataUriMatch) {
-            resultImageUrl = dataUriMatch[0];
+          if (!resultImageUrl && typeof message?.content === "string") {
+            const dataUriMatch = message.content.match(/data:image\/[a-zA-Z+]+;base64,[A-Za-z0-9+/=]+/);
+            if (dataUriMatch) {
+              resultImageUrl = dataUriMatch[0];
+            }
           }
-        }
 
-        if (!resultImageUrl) {
-          const contentPreview = typeof message?.content === "string"
-            ? message.content.substring(0, 500)
-            : JSON.stringify(message?.content)?.substring(0, 500);
-          console.error("AI returned no image. Keys:", JSON.stringify(Object.keys(message || {})),
-            "Content preview:", contentPreview,
-            "Refusal:", JSON.stringify(message?.refusal),
-            "Reasoning:", JSON.stringify(message?.reasoning)?.substring(0, 500));
+          if (resultImageUrl) {
+            console.log(`Success with model: ${model}`);
+            break;
+          }
+
+          console.error(`Model ${model} returned no image. Refusal:`, JSON.stringify(message?.refusal),
+            "Reasoning:", JSON.stringify(message?.reasoning)?.substring(0, 300));
+        } else {
+          const errorText = await aiResponse.text();
+          console.error(`Model ${model} error:`, aiResponse.status, errorText);
         }
-      } else {
-        const errorText = await aiResponse.text();
-        console.error("AI gateway error:", aiResponse.status, errorText);
+      } catch (aiErr) {
+        console.error(`Model ${model} failed:`, aiErr);
       }
-    } catch (aiErr) {
-      console.error("AI try-on generation failed:", aiErr);
     }
 
     if (!resultImageUrl) {

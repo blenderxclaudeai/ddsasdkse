@@ -217,8 +217,6 @@ serve(async (req) => {
     }
 
     // ===== STEP 1: Product Extraction (wearable categories only) =====
-    const wearableCategories = new Set(["ring", "bracelet", "necklace", "earring", "glasses", "hat", "top", "dress", "bottom", "shoes", "bag", "nails", "hair"]);
-    const roomCategories = new Set(["living_room", "bedroom", "kitchen", "bathroom", "office"]);
     const cat = effectiveCategory || "";
     const productLabel = title ? ` The product is: "${title}".` : "";
 
@@ -294,10 +292,10 @@ serve(async (req) => {
     }
 
     // ===== STEP 2: Try-On Compositing =====
-    const promptMode = roomCategories.has(cat) ? "room" :
+    const step2PromptMode = roomCategories.has(cat) ? "room" :
       wearableCategories.has(cat) ? "wearable" :
       cat === "pet" ? "pet" : cat === "car_interior" ? "car" : cat === "garden" ? "garden" : "wearable(default)";
-    console.log(`Step 2: compositing. Category: "${effectiveCategory}", promptMode: "${promptMode}", usedExtractedProduct: ${cleanProductImage !== productImageDataUrl}`);
+    console.log(`Step 2: compositing. Category: "${effectiveCategory}", promptMode: "${step2PromptMode}", usedExtractedProduct: ${cleanProductImage !== productImageDataUrl}`);
 
     let promptText: string;
 
@@ -383,8 +381,8 @@ CRITICAL RULES:
     }
 
     const PER_ATTEMPT_TIMEOUT_MS = 55_000;
-    let resultImageUrl: string | null = null;
-    let aiRefusal: string | null = null;
+    resultImageUrl = null;
+    aiRefusal = null;
 
     // Try compositing (1 attempt with extracted image, 1 retry if needed)
     for (let attempt = 0; attempt < 2; attempt++) {

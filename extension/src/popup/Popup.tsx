@@ -2,14 +2,12 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@ext/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 
+const APP_URL = import.meta.env.VITE_APP_URL || "https://ddsasdkse.lovable.app";
+
 export function Popup() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<any[]>([]);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authError, setAuthError] = useState("");
-  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -42,14 +40,8 @@ export function Popup() {
       .then(({ data }) => setRequests(data ?? []));
   }, [user]);
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError("");
-    const fn = authMode === "login"
-      ? supabase.auth.signInWithPassword({ email, password })
-      : supabase.auth.signUp({ email, password });
-    const { error } = await fn;
-    if (error) setAuthError(error.message);
+  const handleSignIn = () => {
+    chrome.tabs.create({ url: `${APP_URL}/login` });
   };
 
   const handleSignOut = async () => {
@@ -73,43 +65,20 @@ export function Popup() {
           <span className="text-xl font-bold tracking-tight">VTO</span>
           <span className="text-[11px] text-muted-foreground font-medium">v1.0</span>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">Virtual Try-On</p>
+        <p className="text-xs text-muted-foreground mb-6">Try before you buy</p>
 
-        {/* Auth form */}
-        <form onSubmit={handleAuth} className="flex flex-col gap-2">
-          <input
-            className="px-3 py-2.5 rounded-lg border border-border bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-ring/20 transition-shadow"
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-          />
-          <input
-            className="px-3 py-2.5 rounded-lg border border-border bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-ring/20 transition-shadow"
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-          />
-          {authError && (
-            <p className="text-xs text-destructive">{authError}</p>
-          )}
+        {/* Sign in via web app */}
+        <div className="flex flex-col items-center gap-3 my-auto">
+          <p className="text-sm text-muted-foreground text-center leading-relaxed">
+            Sign in on the VTO web app to enable virtual try-ons.
+          </p>
           <button
-            type="submit"
-            className="mt-1 px-3 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm cursor-pointer hover:opacity-90 transition-opacity"
+            onClick={handleSignIn}
+            className="w-full px-3 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm cursor-pointer hover:opacity-90 transition-opacity"
           >
-            {authMode === "login" ? "Sign In" : "Sign Up"}
+            Sign in on VTO ↗
           </button>
-          <button
-            type="button"
-            className="bg-transparent border-none text-muted-foreground text-xs text-center underline cursor-pointer"
-            onClick={() => setAuthMode(m => m === "login" ? "signup" : "login")}
-          >
-            {authMode === "login" ? "Need an account? Sign up" : "Have an account? Sign in"}
-          </button>
-        </form>
+        </div>
 
         <p className="text-[10px] text-muted-foreground/60 text-center mt-auto pt-5">
           We may earn affiliate commission from purchases.
@@ -138,7 +107,7 @@ export function Popup() {
 
       {/* Showroom link */}
       <a
-        href={`${import.meta.env.VITE_APP_URL || "https://ddsasdkse.lovable.app"}/showroom`}
+        href={`${APP_URL}/showroom`}
         target="_blank"
         rel="noopener"
         className="block px-3 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm text-center no-underline hover:opacity-90 transition-opacity"

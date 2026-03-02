@@ -139,7 +139,7 @@ serve(async (req) => {
       });
     }
 
-    const prompt = `Generate a realistic virtual try-on image. Here is the person's photo: ${userPhotoUrl}. The product to try on is shown here: ${imageUrl}. ${title ? `The product is: ${title}.` : ""} Show the person wearing/using this product in a natural, photorealistic way. The result should look like a real photo, not a collage.`;
+    const promptText = `Generate a realistic virtual try-on image. ${title ? `The product is: ${title}.` : ""} Show the person wearing/using this product in a natural, photorealistic way. The result should look like a real photo, not a collage.`;
 
     try {
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -150,32 +150,27 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           model: "google/gemini-3-pro-image-preview",
-          messages: [{ role: "user", content: prompt }],
+          modalities: ["image", "text"],
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: promptText },
+              { type: "image_url", image_url: { url: userPhotoUrl } },
+              { type: "image_url", image_url: { url: imageUrl } },
+            ],
+          }],
         }),
       });
 
       if (aiResponse.ok) {
         const aiData = await aiResponse.json();
-        const choice = aiData.choices?.[0];
-        if (choice?.message?.content) {
-          const content = choice.message.content;
-          if (Array.isArray(content)) {
-            const imagePart = content.find((p: any) => p.type === "image_url" || p.inline_data);
-            if (imagePart?.image_url?.url) {
-              resultImageUrl = imagePart.image_url.url;
-            } else if (imagePart?.inline_data) {
-              resultImageUrl = `data:${imagePart.inline_data.mime_type};base64,${imagePart.inline_data.data}`;
-            }
-          } else if (typeof content === "string" && content.startsWith("data:")) {
-            resultImageUrl = content;
-          }
+        // Primary: images array in message
+        const images = aiData.choices?.[0]?.message?.images;
+        if (images?.[0]?.image_url?.url) {
+          resultImageUrl = images[0].image_url.url;
         }
-        const parts = aiData.choices?.[0]?.message?.parts;
-        if (!resultImageUrl && Array.isArray(parts)) {
-          const imgPart = parts.find((p: any) => p.inline_data);
-          if (imgPart?.inline_data) {
-            resultImageUrl = `data:${imgPart.inline_data.mime_type};base64,${imgPart.inline_data.data}`;
-          }
+        if (!resultImageUrl) {
+          console.error("AI returned no image. Response structure:", JSON.stringify(Object.keys(aiData.choices?.[0]?.message || {})));
         }
       } else {
         const errorText = await aiResponse.text();

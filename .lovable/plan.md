@@ -2,25 +2,30 @@
 
 ## Problem
 
-The logs show: `AI returned no image. Keys: ["role","content","refusal","reasoning","reasoning_details"] Content preview: null`
+The AI model's safety filters trigger when it detects a mismatch between the user's appearance (gender, skin color) and the person modeling the product in the product photo. It interprets the request as "change this person's race/gender," which hits safety guardrails.
 
-The `content` is **null** and the response includes a `refusal` field. This means the model is **refusing** to generate the image — likely due to safety filters triggered by the combination of a person photo + "try-on" prompt. The code never logs the `refusal` or `reasoning` fields, so we can't see the exact reason.
+The root cause is the prompt — it asks the model to show the product "on someone with a similar appearance" while providing two photos of different-looking people. The model gets confused about what's being asked.
 
-## Plan
+## Fix
 
-### Update `supabase/functions/tryon-request/index.ts`
+### Update prompt in `supabase/functions/tryon-request/index.ts`
 
-Two changes:
+Rewrite the prompt to make it crystal clear that:
+- The first image is **the user** — keep them exactly as they are
+- The second image is **only a product reference** — extract just the item, ignore the model wearing it
+- The task is to place the **product** onto the **user's photo**, not to alter the user's appearance
 
-1. **Log refusal and reasoning**: When no image is found, also log `message.refusal` and `message.reasoning` so we can see exactly why the model refused.
+New prompt:
+```
+I'm providing two images. Image 1 is a photo of a person (the customer). Image 2 is a product listing photo — extract ONLY the product/item from it, ignore any model or mannequin shown. Generate a new realistic photo of the SAME person from Image 1, keeping their exact appearance unchanged, but wearing/using the product extracted from Image 2. Do not alter the person's face, skin, body, or identity in any way. Only add the product to them naturally with correct lighting and proportions.
+```
 
-2. **Rework the prompt to avoid safety filter triggers**: The current prompt says "Generate a realistic virtual try-on image" and "Show the person wearing/using this product." This likely triggers person-manipulation safety filters. Instead, use a more indirect prompt like:
-   ```
-   You are a fashion visualization assistant. I'm providing two images: a reference photo of a person and a product photo. Create a new image showing how this product would look when styled on someone with a similar appearance. Focus on realistic lighting and proportions.
-   ```
-   This frames it as creative styling rather than person manipulation, which is less likely to trigger refusals.
+This explicitly tells the model:
+- Don't change the person
+- The product photo model is irrelevant — just extract the item
+- This avoids any "transform person A into person B" interpretation
 
-3. **Return the refusal message to the user** instead of the generic "AI could not generate" error, so users get actionable feedback.
+Also add a retry with `google/gemini-2.5-flash-image` as fallback if the primary model still refuses.
 
 ### File to change
 - `supabase/functions/tryon-request/index.ts`

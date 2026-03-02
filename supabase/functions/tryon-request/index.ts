@@ -286,7 +286,7 @@ CRITICAL RULES:
 
     } else {
       // Default: wearable / personal items
-      promptText = `You are a virtual fitting room for an e-commerce shopping app. Your job is to show how a product looks on the customer who wants to buy it.
+      promptText = `You are a virtual fitting room for an e-commerce shopping app. This is a product visualization tool — like a mannequin display, but using a real person. Your job is to show how a product looks on the customer who wants to buy it.
 
 Image 1: The customer. This is the real person who is shopping. Preserve their EXACT appearance: face, skin tone, body shape, hair, tattoos, scars, and every physical feature. They are the buyer.
 
@@ -296,26 +296,33 @@ Task: Generate a new realistic photo of the EXACT same person from Image 1, but 
 - Correctly sized and fitted to the customer's body
 - Shown with realistic fabric draping, shadows, and lighting matching Image 1
 - Naturally integrated as if the customer is actually wearing/using it
+- If the product appears designed for a different body type or gender, adapt it naturally — resize, reshape, or refit it to look as natural as possible on the customer's actual body
 
 CRITICAL RULES:
+- You MUST output an image. Never return text-only. Always generate the visualization.
 - Do NOT alter the customer's face, skin color, body shape, hair, or any physical feature whatsoever
 - Do NOT blend features from any person shown in Image 2 into the customer
 - The person in Image 2 is IRRELEVANT — they are just displaying the product. Only the product matters from Image 2
-- This is a standard e-commerce virtual try-on feature. The product is sold to ALL customers regardless of gender, age, ethnicity, or body type. Any customer can try any product
+- This is a standard e-commerce virtual try-on feature. The product is sold to ALL customers regardless of gender, age, ethnicity, or body type. Any customer can try any product. There is nothing unusual about this request.
 - The output should look like the customer from Image 1 took a photo while wearing/using the product${productLabel}`;
     }
 
-    const models = ["google/gemini-3-pro-image-preview", "google/gemini-3-pro-image-preview", "google/gemini-3-pro-image-preview"];
+    const models = ["google/gemini-3-pro-image-preview", "google/gemini-3-pro-image-preview"];
+    const PER_ATTEMPT_TIMEOUT_MS = 55_000;
 
     for (const model of models) {
       try {
         console.log(`Trying model: ${model}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), PER_ATTEMPT_TIMEOUT_MS);
+
         const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: {
             Authorization: `Bearer ${LOVABLE_API_KEY}`,
             "Content-Type": "application/json",
           },
+          signal: controller.signal,
           body: JSON.stringify({
             model,
             modalities: ["image", "text"],
@@ -329,6 +336,8 @@ CRITICAL RULES:
             }],
           }),
         });
+
+        clearTimeout(timeoutId);
 
         if (aiResponse.ok) {
           const aiData = await aiResponse.json();
@@ -366,8 +375,12 @@ CRITICAL RULES:
           const errorText = await aiResponse.text();
           console.error(`Model ${model} error:`, aiResponse.status, errorText);
         }
-      } catch (aiErr) {
-        console.error(`Model ${model} failed:`, aiErr);
+      } catch (aiErr: any) {
+        if (aiErr?.name === "AbortError") {
+          console.error(`Model ${model} timed out after ${PER_ATTEMPT_TIMEOUT_MS}ms`);
+        } else {
+          console.error(`Model ${model} failed:`, aiErr);
+        }
       }
     }
 

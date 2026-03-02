@@ -61,7 +61,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         }),
       });
 
-      const data = await res.json();
+      let data: any;
+      try {
+        const text = await res.text();
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        sendResponse({ ok: false, error: "Request timed out. Please try again." });
+        return;
+      }
 
       if (!res.ok) {
         sendResponse({

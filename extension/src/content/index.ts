@@ -32,13 +32,11 @@ import {
     if (area !== "local" || !changes.vto_auth_token) return;
 
     if (changes.vto_auth_token.newValue) {
-      // Just logged in
       removeLoginPill();
       if (!document.getElementById("vto-tryon-btn")) {
         injectButton(doTryOn);
       }
     } else {
-      // Just logged out
       document.getElementById("vto-tryon-btn")?.remove();
       injectLoginPill();
     }
@@ -47,7 +45,8 @@ import {
   function doTryOn() {
     const product = extractProduct();
     if (!product.product_image) {
-      alert("VTO: No product image found on this page.");
+      showModal();
+      updateModalError("No product image found on this page.");
       return;
     }
 
@@ -64,7 +63,10 @@ import {
         if (response?.ok) {
           updateModalSuccess(response);
         } else {
-          updateModalError(response?.error || "Request failed");
+          updateModalError(
+            response?.error || "Request failed",
+            response?.missingPhoto
+          );
           bindRetry();
         }
       }

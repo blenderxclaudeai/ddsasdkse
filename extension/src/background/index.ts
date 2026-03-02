@@ -57,13 +57,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           pageUrl: payload.product_url,
           imageUrl: payload.product_image,
           title: payload.product_title,
+          category: payload.product_category || undefined,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        sendResponse({ ok: false, error: data.error || `HTTP ${res.status}` });
+        sendResponse({
+          ok: false,
+          error: data.error || `HTTP ${res.status}`,
+          missingPhoto: data.missingPhoto || undefined,
+        });
       } else {
         chrome.storage.local.set({
           vto_last_result: {

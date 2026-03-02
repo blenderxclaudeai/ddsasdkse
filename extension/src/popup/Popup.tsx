@@ -359,7 +359,6 @@ export function Popup() {
   const email = storedUser?.email || "";
   const avatarUrl = storedUser?.avatar_url;
   const initial = displayName.charAt(0).toUpperCase();
-  const initial = displayName.charAt(0).toUpperCase();
 
   const completedResults = results.filter((r) => r.result_image_url);
   const pendingResults = results.filter((r) => !r.result_image_url);
@@ -503,7 +502,7 @@ export function Popup() {
               ) : results.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center py-12">
                   <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
-                    <span className="text-[24px]">✨</span>
+                    <span className="text-[24px] text-muted-foreground">—</span>
                   </div>
                   <p className="mt-4 text-[14px] font-medium text-foreground">Nothing here yet</p>
                   <p className="mt-1 max-w-[240px] text-[12px] leading-relaxed text-muted-foreground">
@@ -547,7 +546,7 @@ export function Popup() {
                             rel="noopener noreferrer"
                             className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-[11px] font-medium text-background transition-opacity hover:opacity-90 no-underline"
                           >
-                            🛒 Add to Cart
+                            Add to Cart
                           </a>
                         </div>
                       ))}

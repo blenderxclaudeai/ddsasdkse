@@ -102,7 +102,7 @@ export default function Showroom() {
           ) : results.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
-                <span className="text-[24px]">✨</span>
+                <span className="text-[24px] text-muted-foreground">—</span>
               </div>
               <p className="mt-4 text-[14px] font-medium text-foreground">Nothing here yet</p>
               <p className="mt-1 max-w-[240px] text-[12px] leading-relaxed text-muted-foreground">

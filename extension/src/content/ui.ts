@@ -10,7 +10,7 @@ export function injectButton(onClick: () => void): HTMLButtonElement {
 
   const btn = document.createElement("button");
   btn.id = BUTTON_ID;
-  btn.textContent = "✨ Try On";
+  btn.textContent = "Try On";
   Object.assign(btn.style, {
     position: "fixed",
     bottom: "24px",
@@ -40,7 +40,7 @@ export function injectLoginPill(): void {
   if (document.getElementById(PILL_ID)) return;
   const pill = document.createElement("div");
   pill.id = PILL_ID;
-  pill.textContent = "🔒 Log in to VTO to try on";
+  pill.textContent = "Log in to VTO to try on";
   Object.assign(pill.style, {
     position: "fixed",
     bottom: "24px",
@@ -56,9 +56,8 @@ export function injectLoginPill(): void {
     cursor: "pointer",
   });
   pill.addEventListener("click", () => {
-    // Opens the extension popup (user needs to click the icon)
-    pill.textContent = "Click the VTO icon in toolbar ↗";
-    setTimeout(() => { pill.textContent = "🔒 Log in to VTO to try on"; }, 3000);
+    pill.textContent = "Click the VTO icon in toolbar";
+    setTimeout(() => { pill.textContent = "Log in to VTO to try on"; }, 3000);
   });
   document.body.appendChild(pill);
 }
@@ -86,7 +85,7 @@ export function showModal() {
   });
   card.innerHTML = `
     <h2 style="margin:0 0 4px;font-size:18px;font-weight:700;">VTO Preview</h2>
-    <p style="margin:0 0 16px;font-size:13px;color:#737373;">Generating your try-on…</p>
+    <p style="margin:0 0 16px;font-size:13px;color:#737373;">Generating your try-on...</p>
     <div id="vto-modal-body" style="min-height:200px;display:flex;align-items:center;justify-content:center;">
       <div style="width:32px;height:32px;border:3px solid #e5e5e5;border-top-color:#171717;border-radius:50%;animation:vto-spin 0.8s linear infinite;"></div>
     </div>
@@ -121,14 +120,20 @@ export function updateModalSuccess(result: TryOnResponse) {
   document.getElementById("vto-modal-close")?.addEventListener("click", removeModal);
 }
 
-export function updateModalError(errorMsg: string) {
+export function updateModalError(errorMsg: string, missingPhoto?: string) {
   const body = document.getElementById("vto-modal-body");
   if (!body) return;
+
+  const missingPhotoHtml = missingPhoto
+    ? `<p style="font-size:12px;color:#737373;margin:8px 0 0;">Open the VTO extension and upload a photo of your <strong>${missingPhoto}</strong> in your profile to try on this product.</p>`
+    : "";
+
   body.innerHTML = `
     <div>
       <p style="font-size:14px;color:#dc2626;margin:0 0 8px;">Something went wrong</p>
-      <p style="font-size:12px;color:#737373;margin:0 0 16px;">${errorMsg}</p>
-      <div style="display:flex;gap:8px;justify-content:center;">
+      <p style="font-size:12px;color:#737373;margin:0 0 8px;">${errorMsg}</p>
+      ${missingPhotoHtml}
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">
         <button id="vto-modal-retry" style="padding:8px 20px;border:1px solid #e5e5e5;border-radius:8px;background:#fff;color:#171717;font-size:13px;font-weight:500;cursor:pointer;">Retry</button>
         <button id="vto-modal-close" style="padding:8px 20px;border:none;border-radius:8px;background:#171717;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Close</button>
       </div>

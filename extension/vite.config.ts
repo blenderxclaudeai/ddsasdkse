@@ -65,6 +65,13 @@ export default defineConfig(() => {
             path.resolve(__dirname, "manifest.json"),
             path.resolve(distDir, "manifest.json")
           );
+
+          // Rename index.html → popup.html to match manifest
+          const indexHtml = path.resolve(distDir, "index.html");
+          const popupHtml = path.resolve(distDir, "popup.html");
+          if (fs.existsSync(indexHtml)) {
+            fs.renameSync(indexHtml, popupHtml);
+          }
         },
       },
     ],

@@ -106,7 +106,19 @@ serve(async (req) => {
         const { data: signedData } = await serviceClient.storage
           .from("profile-photos")
           .createSignedUrl(photoData.storage_path, 300);
-        userPhotoUrl = signedData?.signedUrl ?? null;
+        const signedUrl = signedData?.signedUrl;
+        if (signedUrl) {
+          // Fetch image and convert to base64 data URL (AI gateway needs MIME type)
+          const imgRes = await fetch(signedUrl);
+          if (imgRes.ok) {
+            const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+            const buf = new Uint8Array(await imgRes.arrayBuffer());
+            let binary = "";
+            for (let i = 0; i < buf.length; i++) binary += String.fromCharCode(buf[i]);
+            const b64 = btoa(binary);
+            userPhotoUrl = `data:${contentType};base64,${b64}`;
+          }
+        }
       }
 
       // If no matching photo, return a clear error

@@ -178,11 +178,6 @@ serve(async (req) => {
     }
 
     // --- Category-aware prompt system ---
-    const wearableCategories = new Set(["ring", "bracelet", "necklace", "earring", "glasses", "hat", "top", "dress", "bottom", "shoes", "bag", "nails", "hair"]);
-    const roomCategories = new Set(["living_room", "bedroom", "kitchen", "bathroom", "office"]);
-    const petCategories = new Set(["pet"]);
-    const carCategories = new Set(["car_interior"]);
-    const gardenCategories = new Set(["garden"]);
 
     let promptText: string;
     const cat = category || "";
@@ -208,7 +203,7 @@ CRITICAL RULES:
 - The room must look identical to Image 1, just with one new product added
 - If the product is large (sofa, table, bed), find an appropriate open space in the room${productLabel}`;
 
-    } else if (petCategories.has(cat)) {
+    } else if (cat === "pet") {
       promptText = `You are a virtual try-on tool for a pet products e-commerce app. Your job is to show how a product looks on a customer's real pet.
 
 Image 1: A photo of the customer's pet. This is their actual animal — preserve its exact appearance: breed, color, markings, size, expression, and pose.
@@ -222,7 +217,7 @@ CRITICAL RULES:
 - Do NOT swap the pet for a different animal
 - The pet must look identical to Image 1, just with the product added${productLabel}`;
 
-    } else if (carCategories.has(cat)) {
+    } else if (cat === "car_interior") {
       promptText = `You are a virtual staging tool for a car accessories e-commerce app. Your job is to show how a product looks inside a customer's real vehicle.
 
 Image 1: A photo of the customer's car interior. Preserve every detail: dashboard, seats, steering wheel, color scheme, and layout.
@@ -236,7 +231,7 @@ CRITICAL RULES:
 - Do NOT add any people to the image
 - The car interior must look identical to Image 1, just with the product added${productLabel}`;
 
-    } else if (gardenCategories.has(cat)) {
+    } else if (cat === "garden") {
       promptText = `You are a virtual staging tool for a garden/outdoor products e-commerce app. Your job is to show how a product looks in a customer's real outdoor space.
 
 Image 1: A photo of the customer's garden, patio, balcony, or outdoor area. Preserve every detail: plants, fencing, flooring, structures, and layout.

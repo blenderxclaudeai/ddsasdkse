@@ -1,32 +1,18 @@
 
 
-## Two-Step Product Extraction Pipeline
+## Bug: Edge Function Boot Failure
 
-### Problem
-The AI model sees the store's product photo (often showing a model of a specific gender/ethnicity) alongside the user's photo. This triggers safety filters when there's a demographic mismatch. No amount of prompt engineering can override hardcoded model safety layers.
+The `tryon-request` function is crashing on startup with `Identifier 'wearableCategories' has already been declared` because the two-step pipeline implementation added a second `const wearableCategories` (line 220) and `const roomCategories` (line 221) when they were already declared at lines 127-128.
 
-### Solution: Split into two AI calls
+Similarly, `promptMode` is declared at line 129 and again at line 297.
 
-**Step 1 — Product Extraction** (new)
-- Send ONLY the product image (Image 2) to the AI
-- Prompt: "Extract just the product/clothing item from this image. Remove the person, mannequin, and background completely. Output the item on a plain white background as if it were a flat-lay product photo."
-- Use `google/gemini-3-pro-image-preview` for quality
-- Result: a clean product-only image with no person visible
+## Fix
 
-**Step 2 — Try-On Compositing** (existing, modified)
-- Send the user's photo + the clean extracted product (from Step 1)
-- Since the product image no longer contains another person, safety filters have nothing to compare demographics on
-- Simplified prompt: "Place this clothing item on this person" — no need for the complex anti-discrimination language
+**File:** `supabase/functions/tryon-request/index.ts`
 
-### Timeout Budget
-- Current: 2 attempts × 55s = 110s total
-- New: Step 1 (45s) + Step 2 (55s) = 100s total, with one retry of Step 2 if needed
-- Stays within edge function limits
+1. **Remove the duplicate declarations at lines 220-221** — the `wearableCategories` and `roomCategories` sets already exist from line 127-128. Just use the existing variables.
+2. **Remove the duplicate `promptMode` at line 297** — rename it or reuse the one from line 129. Since the value is identical, just drop the redeclaration.
+3. **Rename `cat` at line 222** or use `effectiveCategory` directly, since that's what the earlier block already references.
 
-### Files to change
-- `supabase/functions/tryon-request/index.ts`
-  - Add Step 1: product extraction call before the try-on loop
-  - Use the extracted clean product image as input to Step 2 instead of the raw store image
-  - Simplify the wearable prompt since there's no longer a "person in Image 2" to worry about
-  - Adjust timeouts: 45s for extraction, 55s for compositing
+Essentially: lines 218-222 and 297-299 need to reference the already-declared variables instead of re-declaring them. Then redeploy.
 

@@ -86,6 +86,7 @@ serve(async (req) => {
 
     let resultImageUrl: string | null = null;
     let userPhotoUrl: string | null = null;
+    let aiRefusal: string | null = null;
 
     // If authenticated, fetch the correct profile photo
     if (userId) {
@@ -168,7 +169,7 @@ serve(async (req) => {
       });
     }
 
-    const promptText = `Generate a realistic virtual try-on image. ${title ? `The product is: ${title}.` : ""} Show the person wearing/using this product in a natural, photorealistic way. The result should look like a real photo, not a collage.`;
+    const promptText = `You are a fashion and lifestyle visualization assistant. I'm providing two images: a reference photo showing a person (or space), and a product photo. Create a new composite image that realistically shows how this product would look when styled on someone with a similar appearance (or placed in a similar space). ${title ? `The product is: ${title}.` : ""} Focus on realistic lighting, proportions, and natural integration. The output should look like a professional product photo.`;
 
     try {
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -194,6 +195,7 @@ serve(async (req) => {
       if (aiResponse.ok) {
         const aiData = await aiResponse.json();
         const message = aiData.choices?.[0]?.message;
+        aiRefusal = message?.refusal || null;
 
         // Check 1: images array
         if (message?.images?.[0]?.image_url?.url) {
@@ -222,7 +224,10 @@ serve(async (req) => {
           const contentPreview = typeof message?.content === "string"
             ? message.content.substring(0, 500)
             : JSON.stringify(message?.content)?.substring(0, 500);
-          console.error("AI returned no image. Keys:", JSON.stringify(Object.keys(message || {})), "Content preview:", contentPreview);
+          console.error("AI returned no image. Keys:", JSON.stringify(Object.keys(message || {})),
+            "Content preview:", contentPreview,
+            "Refusal:", JSON.stringify(message?.refusal),
+            "Reasoning:", JSON.stringify(message?.reasoning)?.substring(0, 500));
         }
       } else {
         const errorText = await aiResponse.text();
@@ -233,7 +238,10 @@ serve(async (req) => {
     }
 
     if (!resultImageUrl) {
-      return new Response(JSON.stringify({ error: "AI could not generate a try-on image. Please try again." }), {
+      const errorMsg = typeof aiRefusal === "string" && aiRefusal
+        ? `The AI declined: ${aiRefusal}`
+        : "AI could not generate a try-on image. Please try again.";
+      return new Response(JSON.stringify({ error: errorMsg }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

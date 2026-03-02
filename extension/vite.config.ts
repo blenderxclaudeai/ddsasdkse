@@ -77,13 +77,14 @@ export default defineConfig(() => {
       },
     ],
 
-    // Popup is the main entry (React app)
-    root: extensionRoot,
+    // Popup is the main entry (React app) — root must be src/popup
+    // so that index.html lands at dist root (not dist/src/popup/)
+    root: path.resolve(extensionRoot, "src/popup"),
     base: "./",
     envDir: path.resolve(extensionRoot, ".."),
 
     build: {
-      outDir: "dist",
+      outDir: distDir,
       emptyOutDir: true,
       modulePreload: { polyfill: false },
       target: "chrome110",

@@ -2,50 +2,25 @@
 
 ## Problem
 
-The category detection regex only has **English** keywords. The IKEA page is in Swedish — the product title is "STOCKHOLM 2025 **3-sitssoffa**" (Swedish for sofa). The regex pattern looks for `sofa` but the Swedish word is `soffa`/`sitssoffa`. So:
-
-1. Category detection returns `undefined`
-2. Backend defaults to `full_body` (wearable mode)
-3. It fetches the user's **person photo** instead of the living room photo
-4. AI sees person + sofa → makes person sit on sofa
-
-This will happen on any non-English shopping site.
+The `tryon-request` edge function has a **duplicate variable declaration** bug. `wearableCategories` (and `roomCategories`) are declared with `const` at **line 88** (debug logging block) and again at **line 181** (prompt system block). This causes a `SyntaxError: Identifier 'wearableCategories' has already been declared` and the function fails to boot entirely.
 
 ## Fix
 
-### 1. `extension/src/content/productExtract.ts` — Add multilingual keywords
+**File:** `supabase/functions/tryon-request/index.ts`
 
-Add Swedish, German, French, Spanish, etc. translations for common product categories. Most critical ones:
+Remove the duplicate declarations at lines 180-185 (the second set). The first declarations at lines 88-89 already define these sets identically, so the prompt logic at line 191 onward can just reference the existing variables.
 
-```
-living_room: soffa, sitssoffa, canapé, Sofa, Couch, divano, soffbord...
-bedroom: säng, madrass, sängbord, lit, matelas, Bett...
-kitchen: kök, küche, cuisine, cocina...
-```
-
-Also add the IKEA breadcrumb keywords since IKEA is a major retailer: `fåtölj` (armchair), `soffgrupp` (sofa group), etc.
-
-### 2. `extension/src/content/productExtract.ts` — Also scrape breadcrumbs
-
-IKEA's breadcrumb clearly says "Soffor & fåtöljer > Soffor & soffgrupper > 3-sits soffor". Add breadcrumb text to the detection `combined` string:
-
+Lines to delete:
 ```typescript
-// Scrape breadcrumbs for extra category signals
-const breadcrumbs = document.querySelectorAll('[class*="breadcrumb"] a, nav[aria-label*="bread"] a, ol li a');
-let breadcrumbText = "";
-breadcrumbs.forEach(a => breadcrumbText += " " + a.textContent);
-const combined = (text + " " + jsonLdText + " " + breadcrumbText).toLowerCase();
+// --- Category-aware prompt system ---
+const wearableCategories = new Set([...]); // line 181 — duplicate
+const roomCategories = new Set([...]);     // line 182 — duplicate  
+const petCategories = new Set(["pet"]);    // line 183
+const carCategories = new Set(["car_interior"]); // line 184
+const gardenCategories = new Set(["garden"]);    // line 185
 ```
 
-### 3. `supabase/functions/tryon-request/index.ts` — Add debug logging
+Replace with references to the existing variables (lines 88-89) and inline the simple checks for pet/car/garden since they're single-value sets (already done via `category === "pet"` etc. in the debug block).
 
-Log the received category and selected prompt mode so we can diagnose future issues:
-
-```typescript
-console.log(`Category received: "${category}", prompt mode: "${promptMode}"`);
-```
-
-### Files to change
-- `extension/src/content/productExtract.ts` — add breadcrumb scraping + multilingual regex patterns
-- `supabase/functions/tryon-request/index.ts` — add category/mode logging
+Redeploy the function after the fix.
 

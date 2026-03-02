@@ -10,6 +10,5 @@ export const supabase = createClient(url, key, {
   },
 });
 
-// For background service worker (no localStorage), use raw fetch
 export const SUPABASE_URL = url;
 export const SUPABASE_ANON_KEY = key;

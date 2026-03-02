@@ -1,8 +1,23 @@
 import { extractProduct } from "./productExtract";
-import { injectButton, showModal, updateModalSuccess, updateModalError, getRetryButton } from "./ui";
+import { injectButton, injectLoginPill, removeLoginPill, showModal, updateModalSuccess, updateModalError, getRetryButton } from "./ui";
 
 (() => {
-  if (document.getElementById("vto-tryon-btn")) return;
+  if (document.getElementById("vto-tryon-btn") || document.getElementById("vto-login-pill")) return;
+
+  // Check auth state from background before showing button
+  chrome.runtime.sendMessage({ type: "VTO_GET_AUTH" }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.log("[VTO] Extension context error:", chrome.runtime.lastError.message);
+      return;
+    }
+
+    if (response?.loggedIn) {
+      removeLoginPill();
+      injectButton(doTryOn);
+    } else {
+      injectLoginPill();
+    }
+  });
 
   function doTryOn() {
     const product = extractProduct();
@@ -38,9 +53,7 @@ import { injectButton, showModal, updateModalSuccess, updateModalError, getRetry
     }
   }
 
-  injectButton(doTryOn);
-
-  // SPA navigation watcher — reset button state on URL change
+  // SPA navigation watcher
   let lastUrl = location.href;
   new MutationObserver(() => {
     if (location.href !== lastUrl) {

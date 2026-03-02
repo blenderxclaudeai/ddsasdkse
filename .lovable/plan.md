@@ -1,37 +1,46 @@
 
 
-## Problems
+## Problem
 
-1. **Button/pill appears on every website** (GitHub, Google, etc.) — there is zero product page detection. The content script runs on `<all_urls>` and immediately injects the button or login pill with no check.
+The AI image generation call is failing silently because:
 
-2. **Doesn't appear on Zalando** — Zalando is a SPA. The content script runs once at `document_idle`. If the page navigates client-side to a product page after initial load, the script doesn't re-evaluate. The MutationObserver at the bottom watches for URL changes but does nothing with them.
+1. **Missing `modalities` parameter**: The Lovable AI image generation API requires `modalities: ["image", "text"]` in the request body. Without it, the model returns text only -- no image.
 
-3. **Emoji still visible** — The screenshot shows a sparkle on the "Try On" button. This is likely a stale extension build, but we should double-check all text strings.
+2. **Wrong response parsing**: The code looks for `content` as an array with `image_url`/`inline_data` parts, or `message.parts`. But the actual response format puts images in `message.images[].image_url.url` -- a separate field the code never checks.
 
 ## Plan
 
-### 1. Add `isProductPage()` gate in `extension/src/content/index.ts`
+### Update `supabase/functions/tryon-request/index.ts`
 
-Before injecting anything, check if the current page is actually a product page using these signals:
-- JSON-LD `@type: "Product"` schema
-- `og:type` = `"product"` or `"og:product"`
-- Presence of price indicators (elements with `itemprop="price"`, common price CSS patterns)
-- "Add to cart" / "Buy" buttons
-- URL patterns common to product pages (`/product/`, `/p/`, `/dp/`)
+1. Add `modalities: ["image", "text"]` to the AI gateway request body
+2. Add parsing for `message.images[0].image_url.url` (the actual response format)
+3. Add better logging so failures are diagnosable -- log the AI response structure when no image is found
+4. Use multimodal content format (array with text + image_url parts) instead of embedding URLs in a text string, so the model actually sees the images
 
-If none of these signals are found, do NOT inject the button or pill. This stops it from appearing on GitHub, Google, etc.
+The request should look like:
+```typescript
+body: JSON.stringify({
+  model: "google/gemini-3-pro-image-preview",
+  modalities: ["image", "text"],
+  messages: [{
+    role: "user",
+    content: [
+      { type: "text", text: "Generate a realistic virtual try-on..." },
+      { type: "image_url", image_url: { url: userPhotoUrl } },
+      { type: "image_url", image_url: { url: imageUrl } }
+    ]
+  }]
+})
+```
 
-### 2. Fix SPA navigation re-evaluation
+And response parsing should check:
+```typescript
+const images = aiData.choices?.[0]?.message?.images;
+if (images?.[0]?.image_url?.url) {
+  resultImageUrl = images[0].image_url.url;
+}
+```
 
-The MutationObserver already detects URL changes but doesn't act on them. Update it to re-run the product page check and inject/remove the button accordingly when the URL changes. This fixes Zalando and other SPAs where users navigate to a product page after the initial script load.
-
-### 3. Verify emoji removal
-
-Confirm all UI strings in `ui.ts` and `Popup.tsx` have no emojis. The current code looks clean, so this is likely a stale build issue — but will double-check.
-
-### Files to change
-
-- **`extension/src/content/index.ts`** — Add `isProductPage()` check, make MutationObserver re-evaluate on URL change
-- **`extension/src/content/ui.ts`** — Verify no emojis (looks clean already)
-- **`extension/src/popup/Popup.tsx`** — Verify no emojis
+### File to change
+- `supabase/functions/tryon-request/index.ts`
 

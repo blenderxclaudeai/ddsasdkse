@@ -17,7 +17,7 @@ import {
   ScanEye,
   ShoppingBag,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+
 import ImpactCalculator from "@/components/ImpactCalculator";
 
 // Product images
@@ -193,23 +193,16 @@ export default function LandingPage() {
           <span className="text-lg font-semibold tracking-tight font-display">
             VTO
           </span>
-          <div className="flex items-center gap-3">
-            <Link to="/login">
-              <Button variant="ghost" size="sm">
-                Sign in
-              </Button>
-            </Link>
-            <a
-              href="https://chrome.google.com/webstore"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button size="sm" className="gap-1.5">
-                <Chrome className="h-3.5 w-3.5" />
-                Get extension
-              </Button>
-            </a>
-          </div>
+          <a
+            href="https://chrome.google.com/webstore"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Button size="sm" className="gap-1.5">
+              <Chrome className="h-3.5 w-3.5" />
+              Get extension
+            </Button>
+          </a>
         </div>
       </nav>
 
@@ -304,7 +297,7 @@ export default function LandingPage() {
             {[...tryOnCategories, ...tryOnCategories].map((c, i) => (
               <div
                 key={i}
-                className="mx-2 flex h-36 w-36 shrink-0 flex-col items-center justify-center rounded-xl border bg-card text-center transition-shadow hover:shadow-md sm:h-44 sm:w-44"
+                className="mx-2 flex h-36 w-36 shrink-0 flex-col items-center justify-center rounded-xl border bg-background text-center transition-shadow hover:shadow-md sm:h-44 sm:w-44"
               >
                 <img src={c.img} alt={c.label} className="h-24 w-24 object-contain sm:h-32 sm:w-32" />
                 <span className="mt-1 text-xs font-medium text-foreground">{c.label}</span>
@@ -321,7 +314,7 @@ export default function LandingPage() {
             {[...tryOnCategories2, ...tryOnCategories2].map((c, i) => (
               <div
                 key={i}
-                className="mx-2 flex h-36 w-36 shrink-0 flex-col items-center justify-center rounded-xl border bg-card text-center transition-shadow hover:shadow-md sm:h-44 sm:w-44"
+                className="mx-2 flex h-36 w-36 shrink-0 flex-col items-center justify-center rounded-xl border bg-background text-center transition-shadow hover:shadow-md sm:h-44 sm:w-44"
               >
                 <img src={c.img} alt={c.label} className="h-24 w-24 object-contain sm:h-32 sm:w-32" />
                 <span className="mt-1 text-xs font-medium text-foreground">{c.label}</span>
@@ -420,9 +413,6 @@ export default function LandingPage() {
             VTO
           </span>
           <div className="flex gap-4">
-            <Link to="/login" className="hover:text-foreground transition-colors">
-              Sign in
-            </Link>
             <a href="#how-it-works" className="hover:text-foreground transition-colors">
               How it works
             </a>

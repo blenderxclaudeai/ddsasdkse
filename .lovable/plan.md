@@ -1,29 +1,49 @@
 
 
-## Landing Page for VTO (Virtual Try-On)
+## Affiliate Revenue Maximization — Techniques Overview
 
-A public landing page at `/` matching the app's monochrome, clean design system. No login required.
+Here are all the realistic techniques to ensure your affiliate links get used, ranked by impact and feasibility. You can combine multiple approaches.
 
-### Sections (top to bottom)
+---
 
-1. **Hero** - Product name "VTO", tagline, Chrome Web Store download button, and a mock screenshot of the extension in action
-2. **How it works** - 3-step visual walkthrough: Browse any store → Click Try On → See it on you
-3. **Features** - Grid of 4-6 key features (AI-powered, works on any store, save to showroom, etc.) with lucide icons
-4. **Reviews / Testimonials** - Carousel or grid of user quotes with name, avatar placeholder, and star rating (hardcoded mock data for now)
-5. **Pricing** - Simple card showing free tier info
-6. **FAQ** - Accordion with common questions
-7. **Footer** - Links, copyright, social placeholders
+### Technique 1: "Buy This Item" CTA in the Try-On Result Modal (Highest Impact)
+After a successful try-on, the result modal currently shows the image + a "Close" button. Add a prominent **"Buy This Item"** button that routes through your affiliate redirect. This is the highest-intent moment — they just saw themselves wearing it.
 
-### Route changes
-- `src/App.tsx`: Change `/` from redirecting to `/profile` → render the new `LandingPage` component (public, no auth)
-- Keep `/profile` redirect for logged-in users handled inside the landing page itself (optional CTA)
+### Technique 2: "Buy" Button on Every Product Page (Content Script)
+After a try-on completes, replace/augment the floating "Try On" button with a persistent **"Buy via VTO"** button on the product page itself. Clicking it routes through your affiliate link. The button stays visible as long as they're on that product page.
 
-### New files
-- `src/pages/LandingPage.tsx` - Full landing page with all sections above
+### Technique 3: Showroom "Add to Cart" Links (Already Exists)
+You already have this — every completed try-on in the Showroom has an "Add to Cart" button that goes through the redirect function. This is good but only works when users revisit the web app.
 
-### Design
-- Same monochrome palette, SF Pro font stack, rounded corners, subtle borders
-- No emojis in any UI element
-- Responsive: looks good full-width on desktop, stacks on mobile
-- Consistent with the 400x600 extension aesthetic but expanded to full viewport
+### Technique 4: Automatic Affiliate Cookie Drop via Background Navigation
+When a user does a try-on, the background script silently opens the affiliate redirect URL in a background tab (or via `fetch` with redirect follow) to set the affiliate cookie on the retailer's domain. The user never sees this. Then when they naturally purchase (even days later), you get credited. This is the most "invisible" technique.
+
+### Technique 5: Page Redirect After Try-On
+After showing the try-on result, when the user closes the modal, redirect the current page through your affiliate link. The page reloads on the same product but now with your affiliate cookie set. Subtle but effective.
+
+### Technique 6: Notification / Reminder System
+After a try-on, show a browser notification (via the extension) hours later: "Still thinking about that [product name]? Buy it here." The link goes through your affiliate redirect.
+
+### Technique 7: "Wishlist" / Save Feature
+Let users save items they tried on. Each saved item links through affiliate. Creates a persistent list of affiliate-linked products they return to.
+
+---
+
+### My Recommendation: Combine Techniques 1 + 4 + 5
+
+- **Technique 1**: Add "Buy This Item" to the try-on result modal (natural, high conversion)
+- **Technique 4**: Silent affiliate cookie drop in background on every try-on (catches users who buy later without clicking your button)
+- **Technique 5**: Redirect page through affiliate link when modal closes (sets cookie even if they ignore the buy button)
+
+This creates 3 layers: explicit CTA, silent cookie, and page-level cookie — covering almost every purchase scenario.
+
+### Files to change
+- `extension/src/content/ui.ts` — Add "Buy This Item" button to success modal, add page redirect on modal close
+- `extension/src/background/index.ts` — Add silent affiliate cookie drop after successful try-on
+- `extension/src/content/index.ts` — Handle post-try-on button state changes
+
+### Important notes
+- Technique 4 (silent background navigation) works because Chrome extensions can open tabs or make fetch requests that follow redirects, setting cookies on the retailer domain
+- No retailer-side modifications needed — this all happens client-side via the extension
+- The redirect function already handles affiliate template lookup, so all techniques funnel through the same system
 

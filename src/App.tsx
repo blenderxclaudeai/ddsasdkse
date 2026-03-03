@@ -10,6 +10,7 @@ import Profile from "./pages/Profile";
 import Showroom from "./pages/Showroom";
 import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
+import LandingPage from "./pages/LandingPage";
 
 const queryClient = new QueryClient();
 
@@ -29,7 +30,7 @@ const App = () => (
       <Router>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={<Navigate to="/profile" replace />} />
+            <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/showroom" element={<ProtectedRoute><Showroom /></ProtectedRoute>} />

@@ -369,130 +369,127 @@ export function Popup() {
   const activeGroup = CATEGORY_GROUPS.find((g) => g.key === activeTab) || CATEGORY_GROUPS[0];
 
   return (
-    <div className="w-[380px] min-h-[480px] flex flex-col">
-      {/* Settings gear + sign out */}
-      <div className="flex items-center justify-end px-3 pt-3">
-        <button
-          onClick={handleSignOut}
-          className="text-muted-foreground text-[11px] font-medium px-2 py-1 rounded hover:bg-secondary hover:text-foreground transition-colors"
-        >
-          Sign Out
-        </button>
+    <div className="w-[380px] h-[560px] flex flex-col overflow-hidden">
+      {/* Fixed header: sign out + avatar */}
+      <div className="shrink-0 px-5 pt-4 pb-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center overflow-hidden">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-[13px] font-medium text-muted-foreground">{initial}</span>
+              )}
+            </div>
+            <div>
+              <p className="text-[14px] font-medium text-foreground leading-tight">{displayName}</p>
+              <p className="text-[11px] text-muted-foreground">{email}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="text-muted-foreground text-[11px] font-medium px-2.5 py-1 rounded-lg hover:bg-secondary hover:text-foreground transition-colors"
+          >
+            Sign Out
+          </button>
+        </div>
       </div>
 
-      {/* Content area */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pb-2">
+      {/* Fixed tabs (only on profile screen) */}
+      {screen === "profile" && (
+        <div className="shrink-0 px-5 pb-2">
+          <p className="text-[11px] text-muted-foreground mb-2">Your photos for virtual try-on</p>
+          <div className="flex gap-1 flex-wrap">
+            {CATEGORY_GROUPS.map((group) => (
+              <button
+                key={group.key}
+                onClick={() => setActiveTab(group.key)}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
+                  activeTab === group.key
+                    ? "bg-foreground text-background"
+                    : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {group.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto px-5 pb-3">
         {screen === "profile" ? (
-          /* ── PROFILE SCREEN ── */
-          <div className="flex flex-col">
-            {/* Avatar + info */}
-            <div className="flex flex-col items-center pt-2 text-center">
-              <div className="h-14 w-14 rounded-full bg-secondary flex items-center justify-center overflow-hidden">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
-                ) : (
-                  <span className="text-[15px] font-medium text-muted-foreground">{initial}</span>
-                )}
-              </div>
-              <p className="mt-3 text-[15px] font-medium text-foreground">{displayName}</p>
-              <p className="mt-0.5 text-[12px] text-muted-foreground">{email}</p>
-            </div>
-
-            {/* Photo tabs */}
-            <p className="text-center text-[12px] text-muted-foreground mt-4">
-              Your photos for virtual try-on
-            </p>
-
-            {/* Tab buttons */}
-            <div className="flex justify-center gap-1 mt-3 flex-wrap">
-              {CATEGORY_GROUPS.map((group) => (
-                <button
-                  key={group.key}
-                  onClick={() => setActiveTab(group.key)}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
-                    activeTab === group.key
-                      ? "bg-foreground text-background"
-                      : "bg-secondary text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {group.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Photo grid */}
-            <div className="grid grid-cols-2 gap-3 pt-3 pb-4">
-              {activeGroup.categories.map((cat) => {
-                const photo = photos.find((p) => p.category === cat.key);
-                return (
-                  <div key={cat.key} className="group relative">
-                    {photosLoading ? (
-                      <div className="aspect-square rounded-xl bg-secondary animate-pulse" />
-                    ) : photo?.signedUrl ? (
-                      <div className="relative">
-                        <img
-                          src={photo.signedUrl}
-                          alt={cat.label}
-                          className="aspect-square w-full rounded-xl object-cover"
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-xl bg-foreground/0 opacity-0 transition-all group-hover:bg-foreground/40 group-hover:opacity-100">
-                          <label className="cursor-pointer rounded-lg bg-background/90 px-3 py-1.5 text-[11px] font-medium text-foreground transition-opacity hover:opacity-80">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) =>
-                                e.target.files?.[0] && handleUpload(cat.key, e.target.files[0])
-                              }
-                            />
-                            Replace
-                          </label>
-                          <button
-                            onClick={() => handleDeletePhoto(photo)}
-                            className="rounded-lg px-3 py-1.5 text-[11px] font-medium text-background transition-opacity hover:opacity-80"
-                            style={{ background: "hsl(0 72% 51%)" }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                        <p className="mt-1.5 text-center text-[11px] font-medium text-muted-foreground">
-                          {cat.label}
-                        </p>
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            {activeGroup.categories.map((cat) => {
+              const photo = photos.find((p) => p.category === cat.key);
+              return (
+                <div key={cat.key} className="group relative">
+                  {photosLoading ? (
+                    <div className="aspect-square rounded-xl bg-secondary animate-pulse" />
+                  ) : photo?.signedUrl ? (
+                    <div className="relative">
+                      <img
+                        src={photo.signedUrl}
+                        alt={cat.label}
+                        className="aspect-square w-full rounded-xl object-cover"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-xl bg-foreground/0 opacity-0 transition-all group-hover:bg-foreground/40 group-hover:opacity-100">
+                        <label className="cursor-pointer rounded-lg bg-background/90 px-3 py-1.5 text-[11px] font-medium text-foreground transition-opacity hover:opacity-80">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) =>
+                              e.target.files?.[0] && handleUpload(cat.key, e.target.files[0])
+                            }
+                          />
+                          Replace
+                        </label>
+                        <button
+                          onClick={() => handleDeletePhoto(photo)}
+                          className="rounded-lg px-3 py-1.5 text-[11px] font-medium text-background transition-opacity hover:opacity-80 bg-destructive"
+                        >
+                          Delete
+                        </button>
                       </div>
-                    ) : (
-                      <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-background text-muted-foreground transition-colors hover:bg-secondary/50">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) =>
-                            e.target.files?.[0] && handleUpload(cat.key, e.target.files[0])
-                          }
-                        />
-                        {uploading === cat.key ? (
-                          <span className="text-[12px]">Uploading…</span>
-                        ) : (
-                          <>
-                            <span className="text-[18px] leading-none">+</span>
-                            <span className="mt-1 text-[11px] font-medium">{cat.label}</span>
-                          </>
-                        )}
-                      </label>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      <p className="mt-1.5 text-center text-[11px] font-medium text-muted-foreground">
+                        {cat.label}
+                      </p>
+                    </div>
+                  ) : (
+                    <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-background text-muted-foreground transition-colors hover:bg-secondary/50">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) =>
+                          e.target.files?.[0] && handleUpload(cat.key, e.target.files[0])
+                        }
+                      />
+                      {uploading === cat.key ? (
+                        <span className="text-[12px]">Uploading…</span>
+                      ) : (
+                        <>
+                          <span className="text-[18px] leading-none">+</span>
+                          <span className="mt-1 text-[11px] font-medium">{cat.label}</span>
+                        </>
+                      )}
+                    </label>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
           /* ── SHOWROOM SCREEN ── */
           <div className="flex flex-col">
-            <div className="pt-2 text-center">
-              <h1 className="text-[22px] font-semibold tracking-tight text-foreground">Showroom</h1>
-              <p className="mt-1 text-[13px] text-muted-foreground">See how products look on you</p>
+            <div className="pt-1 text-center">
+              <h1 className="text-[20px] font-semibold tracking-tight text-foreground">Showroom</h1>
+              <p className="mt-1 text-[12px] text-muted-foreground">See how products look on you</p>
             </div>
 
-            <div className="py-4">
+            <div className="py-3">
               {resultsLoading ? (
                 <div className="grid grid-cols-2 gap-3">
                   {[1, 2, 3, 4].map((i) => (
@@ -500,14 +497,13 @@ export function Popup() {
                   ))}
                 </div>
               ) : results.length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-center py-12">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
-                    <span className="text-[24px] text-muted-foreground">—</span>
+                <div className="flex flex-col items-center justify-center text-center py-10">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary">
+                    <span className="text-[20px] text-muted-foreground">—</span>
                   </div>
-                  <p className="mt-4 text-[14px] font-medium text-foreground">Nothing here yet</p>
-                  <p className="mt-1 max-w-[240px] text-[12px] leading-relaxed text-muted-foreground">
-                    Browse any online store and try products on yourself — clothes, glasses, jewelry,
-                    and more.
+                  <p className="mt-3 text-[13px] font-medium text-foreground">Nothing here yet</p>
+                  <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-muted-foreground">
+                    Browse any online store and try products on yourself.
                   </p>
                 </div>
               ) : (
@@ -524,13 +520,13 @@ export function Popup() {
                           {(r.title || r.price) && (
                             <div className="mt-1.5 px-0.5">
                               {r.title && (
-                                <p className="truncate text-[12px] font-medium text-foreground">
+                                <p className="truncate text-[11px] font-medium text-foreground">
                                   {r.title}
                                 </p>
                               )}
                               <div className="flex items-center gap-1.5">
                                 {r.price && (
-                                  <span className="text-[11px] text-muted-foreground">{r.price}</span>
+                                  <span className="text-[10px] text-muted-foreground">{r.price}</span>
                                 )}
                                 {r.retailer_domain && (
                                   <span className="text-[10px] text-muted-foreground/50">
@@ -544,7 +540,7 @@ export function Popup() {
                             href={getAffiliateUrl(r)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-[11px] font-medium text-background transition-opacity hover:opacity-90 no-underline"
+                            className="mt-1.5 flex w-full items-center justify-center rounded-lg bg-foreground px-3 py-1.5 text-[11px] font-medium text-background transition-opacity hover:opacity-90 no-underline"
                           >
                             Add to Cart
                           </a>
@@ -555,7 +551,7 @@ export function Popup() {
 
                   {pendingResults.length > 0 && (
                     <div>
-                      <p className="mb-3 text-[12px] font-medium text-muted-foreground">
+                      <p className="mb-3 text-[11px] font-medium text-muted-foreground">
                         Processing
                       </p>
                       <div className="grid grid-cols-2 gap-3">
@@ -583,34 +579,34 @@ export function Popup() {
         )}
       </div>
 
-      {/* Bottom tab bar */}
-      <nav className="flex items-center justify-around border-t px-2 py-3" style={{ borderColor: "hsl(0 0% 92%)" }}>
-        <button
-          onClick={() => setScreen("profile")}
-          className={`text-[13px] font-medium tracking-tight transition-opacity ${
-            screen === "profile"
-              ? "text-foreground opacity-100"
-              : "text-muted-foreground opacity-60 hover:opacity-100"
-          }`}
-        >
-          Profile
-        </button>
-        <button
-          onClick={() => setScreen("showroom")}
-          className={`text-[13px] font-medium tracking-tight transition-opacity ${
-            screen === "showroom"
-              ? "text-foreground opacity-100"
-              : "text-muted-foreground opacity-60 hover:opacity-100"
-          }`}
-        >
-          Showroom
-        </button>
-      </nav>
-
-      {/* Disclosure */}
-      <p className="text-[10px] text-muted-foreground/60 text-center pb-2">
-        We may earn affiliate commission from purchases.
-      </p>
+      {/* Fixed bottom nav */}
+      <div className="shrink-0 border-t">
+        <nav className="flex items-center justify-around px-2 py-2.5">
+          <button
+            onClick={() => setScreen("profile")}
+            className={`text-[12px] font-medium tracking-tight transition-colors ${
+              screen === "profile"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Profile
+          </button>
+          <button
+            onClick={() => setScreen("showroom")}
+            className={`text-[12px] font-medium tracking-tight transition-colors ${
+              screen === "showroom"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Showroom
+          </button>
+        </nav>
+        <p className="text-[9px] text-muted-foreground/50 text-center pb-2">
+          We may earn affiliate commission from purchases.
+        </p>
+      </div>
     </div>
   );
 }

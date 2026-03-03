@@ -16,14 +16,6 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://ddsasdkse.lovable.app/*",
-        "https://id-preview--940d6888-2115-4d62-be12-4d99bc80e14c.lovable.app/*"
-      ],
-      "js": ["webAppSync.js"],
-      "run_at": "document_idle"
     }
   ],
   "content_security_policy": {

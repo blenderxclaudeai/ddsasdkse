@@ -223,9 +223,12 @@ export function Popup() {
 
   const handleOAuth = async (provider: "google" | "apple") => {
     setAuthLoading(true);
-    // Opens web app login in a new tab — session syncs back via content script
-    await signInWithOAuth(provider);
-    // Popup stays in "Completing sign-in…" state until chrome.storage updates
+    const result = await signInWithOAuth(provider);
+    if (!result.ok) {
+      setAuthLoading(false);
+      // User cancelled or error — stay on login screen
+    }
+    // On success, chrome.storage.onChanged listener will update state
   };
 
   const handleSignOut = async () => {
@@ -322,10 +325,7 @@ export function Popup() {
         <div className="space-y-3">
           {authLoading ? (
             <div className="text-center space-y-2">
-              <p className="text-[14px] font-medium text-foreground">Completing sign-in…</p>
-              <p className="text-[12px] text-muted-foreground">
-                Sign in on the tab that just opened, then come back here.
-              </p>
+              <p className="text-[14px] font-medium text-foreground">Signing in…</p>
             </div>
           ) : (
             <>

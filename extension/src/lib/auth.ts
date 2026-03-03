@@ -1,17 +1,89 @@
 /**
- * Extension auth — opens the web app login page in a new tab.
- * A content script on the web app domain detects the session and
- * sends it back to the extension background, which persists it.
+ * Extension auth — uses chrome.identity.launchWebAuthFlow
+ * for a fully in-extension OAuth experience (no external tabs).
  */
 
-const APP_URL = "https://ddsasdkse.lovable.app";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
-export async function signInWithOAuth(_provider: "google" | "apple") {
-  // Open the web app login page — OAuth happens there with managed credentials
-  chrome.tabs.create({ url: `${APP_URL}/login`, active: true });
-  // The popup shows a "Completing sign-in…" state.
-  // The web-app content script will detect the session and message the background.
-  // Background persists to chrome.storage.local → popup detects via onChanged.
+export async function signInWithOAuth(
+  provider: "google" | "apple"
+): Promise<{ ok: boolean; error?: string }> {
+  const redirectUrl = chrome.identity.getRedirectURL();
+
+  // Build the Supabase OAuth authorize URL
+  const authUrl =
+    `${SUPABASE_URL}/auth/v1/authorize?provider=${provider}` +
+    `&redirect_to=${encodeURIComponent(redirectUrl)}`;
+
+  return new Promise((resolve) => {
+    chrome.identity.launchWebAuthFlow(
+      { url: authUrl, interactive: true },
+      async (callbackUrl) => {
+        if (chrome.runtime.lastError || !callbackUrl) {
+          resolve({
+            ok: false,
+            error: chrome.runtime.lastError?.message || "Auth cancelled",
+          });
+          return;
+        }
+
+        try {
+          // Tokens are in the URL hash fragment: #access_token=...&refresh_token=...
+          const hashFragment = callbackUrl.split("#")[1];
+          if (!hashFragment) {
+            resolve({ ok: false, error: "No tokens in callback URL" });
+            return;
+          }
+
+          const params = new URLSearchParams(hashFragment);
+          const access_token = params.get("access_token");
+          const refresh_token = params.get("refresh_token");
+
+          if (!access_token) {
+            resolve({ ok: false, error: "No access token received" });
+            return;
+          }
+
+          // Fetch user info from Supabase using the access token
+          const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${access_token}`,
+            },
+          });
+
+          if (!userRes.ok) {
+            resolve({ ok: false, error: "Failed to fetch user info" });
+            return;
+          }
+
+          const userData = await userRes.json();
+
+          const user = {
+            id: userData.id,
+            email: userData.email,
+            name:
+              userData.user_metadata?.full_name ||
+              userData.user_metadata?.name ||
+              userData.email,
+            avatar_url: userData.user_metadata?.avatar_url,
+          };
+
+          // Persist to chrome.storage.local
+          await chrome.storage.local.set({
+            vto_auth_token: access_token,
+            vto_refresh_token: refresh_token,
+            vto_user: user,
+          });
+
+          resolve({ ok: true });
+        } catch (e: any) {
+          resolve({ ok: false, error: e.message || "Auth failed" });
+        }
+      }
+    );
+  });
 }
 
 export async function getStoredUser(): Promise<{

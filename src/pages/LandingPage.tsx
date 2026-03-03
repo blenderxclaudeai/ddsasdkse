@@ -18,6 +18,7 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import ImpactCalculator from "@/components/ImpactCalculator";
 
 // Product images
 import imgJacket from "@/assets/products/jacket.png";
@@ -388,34 +389,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ---- Impact Stats ---- */}
-      <section className="border-t py-20">
-        <div className="mx-auto max-w-5xl px-6">
-          <h2 className="text-center text-2xl font-semibold tracking-tight sm:text-3xl font-display">
-            The impact of trying before buying
-          </h2>
-          <p className="mx-auto mt-3 max-w-lg text-center text-sm text-muted-foreground">
-            VTO helps the planet, businesses, and shoppers — one virtual try-on at a time.
-          </p>
-          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              { stat: "5 kg", label: "CO₂ saved", desc: "Per return avoided — less shipping, lower emissions." },
-              { stat: "$816B", label: "Lost to returns", desc: "Retailers lose billions yearly. VTO cuts return rates drastically." },
-              { stat: "9.5B lbs", label: "Landfill waste", desc: "Returned items often end up in landfill. Try-on helps prevent that." },
-              { stat: "60%", label: "Less time deciding", desc: "Shoppers buy faster and smarter when they can see it on themselves." },
-              { stat: "3×", label: "More confidence", desc: "Customers who try on purchase with significantly more certainty." },
-            ].map((s, i) => (
-              <Card key={i} className="border bg-background">
-                <CardContent className="p-6 sm:p-8">
-                  <p className="text-3xl font-bold tracking-tight font-display">{s.stat}</p>
-                  <p className="mt-1 text-sm font-medium">{s.label}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{s.desc}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* ---- Impact Calculator ---- */}
+      <ImpactCalculator />
 
       {/* ---- FAQ ---- */}
       <section className="border-t bg-muted/30 py-20">

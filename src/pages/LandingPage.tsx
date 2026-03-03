@@ -9,12 +9,6 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Chrome,
-  Sparkles,
-  Globe,
-  Camera,
-  Heart,
-  ShieldCheck,
-  Zap,
   Star,
   ArrowRight,
   MousePointerClick,
@@ -48,55 +42,34 @@ const steps = [
   },
 ];
 
-const features = [
-  {
-    icon: Sparkles,
-    title: "AI-Powered",
-    number: "< 15s",
-    subtitle: "per try-on",
-    description:
-      "State-of-the-art generative AI creates photorealistic results.",
-  },
-  {
-    icon: Globe,
-    title: "Works everywhere",
-    number: "Any",
-    subtitle: "online store",
-    description:
-      "No integrations needed. VTO detects products automatically.",
-  },
-  {
-    icon: Camera,
-    title: "Your photos",
-    number: "1x",
-    subtitle: "upload, reuse forever",
-    description:
-      "Upload photos once and reuse them across every session.",
-  },
-  {
-    icon: Heart,
-    title: "Showroom",
-    number: "\u221E",
-    subtitle: "saved try-ons",
-    description:
-      "Keep a personal gallery to compare and decide later.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Privacy first",
-    number: "0",
-    subtitle: "data shared",
-    description:
-      "Your photos are encrypted and never shared. Delete anytime.",
-  },
-  {
-    icon: Zap,
-    title: "Lightning fast",
-    number: "3",
-    subtitle: "simple steps",
-    description:
-      "Browse, click, see. No friction, no interruption.",
-  },
+const tryOnCategories = [
+  { label: "Dresses", emoji: "👗" },
+  { label: "Sneakers", emoji: "👟" },
+  { label: "Watches", emoji: "⌚" },
+  { label: "Sunglasses", emoji: "🕶️" },
+  { label: "Handbags", emoji: "👜" },
+  { label: "Sofas", emoji: "🛋️" },
+  { label: "Rings", emoji: "💍" },
+  { label: "Jackets", emoji: "🧥" },
+  { label: "Earrings", emoji: "✨" },
+  { label: "Rugs", emoji: "🏠" },
+  { label: "Hats", emoji: "🎩" },
+  { label: "Boots", emoji: "🥾" },
+];
+
+const tryOnCategories2 = [
+  { label: "Necklaces", emoji: "📿" },
+  { label: "T-Shirts", emoji: "👕" },
+  { label: "Lamps", emoji: "💡" },
+  { label: "Bracelets", emoji: "⭐" },
+  { label: "Jeans", emoji: "👖" },
+  { label: "Vases", emoji: "🏺" },
+  { label: "Coats", emoji: "🧣" },
+  { label: "Chairs", emoji: "🪑" },
+  { label: "Heels", emoji: "👠" },
+  { label: "Planters", emoji: "🌿" },
+  { label: "Blazers", emoji: "🤵" },
+  { label: "Curtains", emoji: "🪟" },
 ];
 
 const reviews = [
@@ -291,66 +264,80 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ---- Features — stat-driven layout ---- */}
-      <section className="border-t py-20">
-        <div className="mx-auto max-w-5xl px-6">
+      {/* ---- Try on anything — marquee ---- */}
+      <section className="border-t py-20 overflow-hidden">
+        <div className="mx-auto max-w-5xl px-6 mb-12">
           <h2 className="text-center text-2xl font-semibold tracking-tight sm:text-3xl font-display">
-            Built different
+            Try on anything
           </h2>
           <p className="mx-auto mt-3 max-w-md text-center text-sm text-muted-foreground">
-            Not another generic tool. Here is what sets VTO apart.
+            Clothes, jewellery, home decor, garden — if a store sells it, you can see it on you.
           </p>
-          <div className="mt-14 grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-3">
-            {features.map((f, i) => (
+        </div>
+
+        {/* Row 1 — scrolls left */}
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-background to-transparent" />
+          <div className="absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-background to-transparent" />
+          <div className="flex animate-marquee w-max">
+            {[...tryOnCategories, ...tryOnCategories].map((c, i) => (
               <div
                 key={i}
-                className="flex flex-col items-start gap-3 bg-background p-6 sm:p-8"
+                className="mx-2 flex h-28 w-40 shrink-0 flex-col items-center justify-center rounded-xl border bg-card text-center transition-shadow hover:shadow-md sm:h-32 sm:w-48"
               >
-                <f.icon className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <span className="text-3xl font-bold tracking-tight font-display sm:text-4xl">
-                    {f.number}
-                  </span>
-                  <p className="text-xs text-muted-foreground">{f.subtitle}</p>
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium">{f.title}</h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
-                    {f.description}
-                  </p>
-                </div>
+                <span className="text-3xl">{c.emoji}</span>
+                <span className="mt-2 text-xs font-medium text-foreground">{c.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Row 2 — scrolls right */}
+        <div className="relative mt-3">
+          <div className="absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-background to-transparent" />
+          <div className="absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-background to-transparent" />
+          <div className="flex animate-marquee-reverse w-max">
+            {[...tryOnCategories2, ...tryOnCategories2].map((c, i) => (
+              <div
+                key={i}
+                className="mx-2 flex h-28 w-40 shrink-0 flex-col items-center justify-center rounded-xl border bg-card text-center transition-shadow hover:shadow-md sm:h-32 sm:w-48"
+              >
+                <span className="text-3xl">{c.emoji}</span>
+                <span className="mt-2 text-xs font-medium text-foreground">{c.label}</span>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ---- Reviews — large vertical scroll cards ---- */}
+      {/* ---- Reviews — horizontal scroll big cards ---- */}
       <section className="border-t bg-muted/30 py-20">
-        <div className="mx-auto max-w-2xl px-6">
+        <div className="mx-auto max-w-5xl px-6">
           <h2 className="text-center text-2xl font-semibold tracking-tight sm:text-3xl font-display">
             What people are saying
           </h2>
-          <div className="mt-12 flex flex-col gap-5">
-            {reviews.map((r, i) => (
-              <Card key={i} className="border bg-background">
-                <CardContent className="flex flex-col gap-4 p-8 sm:p-10">
+        </div>
+        <div className="mt-12 flex gap-5 overflow-x-auto px-6 pb-4 snap-x snap-mandatory scrollbar-hide sm:px-[max(1.5rem,calc((100vw-64rem)/2+1.5rem))]">
+          {reviews.map((r, i) => (
+            <Card key={i} className="min-w-[320px] max-w-[380px] shrink-0 snap-center border bg-background sm:min-w-[400px]">
+              <CardContent className="flex h-full flex-col justify-between gap-5 p-8 sm:p-10">
+                <div>
                   <Stars count={r.rating} />
-                  <p className="text-lg font-medium leading-relaxed sm:text-xl">
+                  <p className="mt-4 text-lg font-medium leading-relaxed sm:text-xl">
                     "{r.text}"
                   </p>
-                  <div className="flex items-center gap-3 pt-2">
-                    <Avatar className="h-9 w-9">
-                      <AvatarFallback className="text-xs font-medium">
-                        {r.initials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <p className="text-sm text-muted-foreground">{r.name}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                </div>
+                <div className="flex items-center gap-3 pt-2">
+                  <Avatar className="h-9 w-9">
+                    <AvatarFallback className="text-xs font-medium">
+                      {r.initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <p className="text-sm text-muted-foreground">{r.name}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </section>
 

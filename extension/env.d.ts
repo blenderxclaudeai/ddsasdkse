@@ -1,12 +1,13 @@
 /// <reference types="vite/client" />
 
 declare namespace chrome {
-  namespace identity {
-    function getRedirectURL(path?: string): string;
-    function launchWebAuthFlow(
-      details: { url: string; interactive: boolean },
-      callback: (responseUrl?: string) => void
-    ): void;
+  namespace alarms {
+    function get(name: string): Promise<{ name: string; scheduledTime: number } | undefined>;
+    function create(name: string, info: { periodInMinutes?: number; delayInMinutes?: number }): Promise<void>;
+    function clear(name: string): Promise<boolean>;
+    const onAlarm: {
+      addListener(callback: (alarm: { name: string }) => void): void;
+    };
   }
 
   namespace tabs {

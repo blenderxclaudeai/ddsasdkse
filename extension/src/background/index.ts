@@ -5,8 +5,14 @@
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+const WEB_APP_URL = "https://ddsasdkse.lovable.app";
 
 const TOKEN_REFRESH_ALARM = "cartify_token_refresh";
+const AUTH_TIMEOUT_ALARM = "cartify_auth_timeout";
+
+// Track pending auth tab so we can close it after session sync
+let pendingAuthTabId: number | null = null;
+let pendingAuthResolve: ((result: { ok: boolean; error?: string }) => void) | null = null;
 
 // ── Alarm helper (idempotent, safe to call on every startup) ──
 
@@ -17,7 +23,7 @@ async function ensureTokenRefreshAlarm() {
   }
 }
 
-// Ensure alarm exists whenever service worker starts (alarms may be cleared on restart)
+// Ensure alarm exists whenever service worker starts
 ensureTokenRefreshAlarm().catch((e) =>
   console.warn("[Cartify] alarm init failed:", e)
 );
@@ -25,70 +31,23 @@ ensureTokenRefreshAlarm().catch((e) =>
 // ── Auth helpers ──
 
 async function doOAuthLogin(provider: "google" | "apple"): Promise<{ ok: boolean; error?: string }> {
-  const redirectUrl = chrome.identity.getRedirectURL("auth");
-
-  const authUrl =
-    `${SUPABASE_URL}/auth/v1/authorize?provider=${provider}` +
-    `&redirect_to=${encodeURIComponent(redirectUrl)}`;
+  const authUrl = `${WEB_APP_URL}/auth/extension?provider=${provider}`;
 
   return new Promise((resolve) => {
-    chrome.identity.launchWebAuthFlow(
-      { url: authUrl, interactive: true },
-      async (callbackUrl) => {
-        if (chrome.runtime.lastError || !callbackUrl) {
-          resolve({ ok: false, error: chrome.runtime.lastError?.message || "Auth cancelled" });
-          return;
-        }
+    // Store resolve so CARTIFY_SESSION_FROM_WEB can complete it
+    pendingAuthResolve = resolve;
 
-        try {
-          const hashFragment = callbackUrl.split("#")[1];
-          if (!hashFragment) {
-            resolve({ ok: false, error: "No tokens in callback URL" });
-            return;
-          }
-
-          const params = new URLSearchParams(hashFragment);
-          const access_token = params.get("access_token");
-          const refresh_token = params.get("refresh_token");
-
-          if (!access_token) {
-            resolve({ ok: false, error: "No access token received" });
-            return;
-          }
-
-          // Fetch user info
-          const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-            headers: {
-              apikey: SUPABASE_ANON_KEY,
-              Authorization: `Bearer ${access_token}`,
-            },
-          });
-
-          if (!userRes.ok) {
-            resolve({ ok: false, error: "Failed to fetch user info" });
-            return;
-          }
-
-          const userData = await userRes.json();
-          const user = {
-            id: userData.id,
-            email: userData.email,
-            name: userData.user_metadata?.full_name || userData.user_metadata?.name || userData.email,
-            avatar_url: userData.user_metadata?.avatar_url,
-          };
-
-          await chrome.storage.local.set({
-            cartify_auth_token: access_token,
-            cartify_refresh_token: refresh_token,
-            cartify_user: user,
-          });
-
-          resolve({ ok: true });
-        } catch (e: any) {
-          resolve({ ok: false, error: e.message || "Auth failed" });
-        }
+    chrome.tabs.create({ url: authUrl, active: true }, (tab) => {
+      if (chrome.runtime.lastError || !tab?.id) {
+        pendingAuthResolve = null;
+        resolve({ ok: false, error: chrome.runtime.lastError?.message || "Failed to open auth tab" });
+        return;
       }
-    );
+      pendingAuthTabId = tab.id;
+
+      // Set a 2-minute timeout alarm
+      chrome.alarms.create(AUTH_TIMEOUT_ALARM, { delayInMinutes: 2 });
+    });
   });
 }
 
@@ -148,11 +107,29 @@ async function refreshToken(): Promise<boolean> {
   }
 }
 
+// ── Helper: close auth tab + resolve pending promise ──
+
+function completeAuth(result: { ok: boolean; error?: string }) {
+  // Clear timeout alarm
+  chrome.alarms.clear(AUTH_TIMEOUT_ALARM);
+
+  // Close the auth tab
+  if (pendingAuthTabId !== null) {
+    try { chrome.tabs.remove(pendingAuthTabId); } catch {}
+    pendingAuthTabId = null;
+  }
+
+  // Resolve the pending promise
+  if (pendingAuthResolve) {
+    pendingAuthResolve(result);
+    pendingAuthResolve = null;
+  }
+}
+
 // ── Display mode: dynamically toggle popup vs side panel (fail-safe) ──
 
 async function applyDisplayMode(mode: "popup" | "sidepanel") {
   if (mode === "sidepanel") {
-    // Check if Side Panel API is available (Chrome 114+)
     const sidePanelSupported =
       !!(chrome.sidePanel && typeof (chrome.sidePanel as any).setPanelBehavior === "function");
 
@@ -163,7 +140,6 @@ async function applyDisplayMode(mode: "popup" | "sidepanel") {
       return;
     }
 
-    // Disable popup so action.onClicked fires, and enable side panel on click
     await chrome.action.setPopup({ popup: "" });
     try {
       await (chrome.sidePanel as any).setPanelBehavior({ openPanelOnActionClick: true });
@@ -173,7 +149,6 @@ async function applyDisplayMode(mode: "popup" | "sidepanel") {
       await chrome.storage.local.set({ cartify_display_mode: "popup" });
     }
   } else {
-    // Re-enable popup and disable side panel on click
     await chrome.action.setPopup({ popup: "popup.html" });
     try {
       if (chrome.sidePanel && typeof (chrome.sidePanel as any).setPanelBehavior === "function") {
@@ -217,7 +192,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
-  // Session sync from web app content script
+  // Session sync from web app content script (webAppSync.js)
   if (msg.type === "CARTIFY_SESSION_FROM_WEB") {
     const { access_token, refresh_token, user } = msg.payload;
     chrome.storage.local.set(
@@ -226,7 +201,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         cartify_refresh_token: refresh_token,
         cartify_user: user,
       },
-      () => sendResponse({ ok: true })
+      () => {
+        sendResponse({ ok: true });
+        // Complete the pending auth flow — close tab + resolve promise
+        completeAuth({ ok: true });
+      }
     );
     return true;
   }
@@ -297,8 +276,7 @@ async function handleTryOn(payload: any): Promise<any> {
       };
     }
 
-    // Store only metadata locally (URLs, not base64 blobs) to avoid exceeding 10 MB quota
-    // Guard: never persist data URLs — they can be megabytes and blow the 10 MB quota
+    // Guard: never persist data URLs
     const safeImageUrl =
       typeof data.resultImageUrl === "string" && data.resultImageUrl.startsWith("data:")
         ? null
@@ -312,7 +290,7 @@ async function handleTryOn(payload: any): Promise<any> {
       timestamp: Date.now(),
     };
 
-    // Add to recent_tryons list (capped at 20 entries of metadata only)
+    // Add to recent_tryons list (capped at 20)
     const existing = await chrome.storage.local.get("cartify_recent_tryons");
     const recent = existing.cartify_recent_tryons || [];
     recent.unshift(result);
@@ -336,7 +314,6 @@ async function handleTryOn(payload: any): Promise<any> {
 
 // ── Lifecycle ──
 
-// Re-apply display mode on every service worker startup (browser restart, wake-up)
 chrome.runtime.onStartup.addListener(async () => {
   const result = await chrome.storage.local.get("cartify_display_mode");
   const mode = result.cartify_display_mode || "popup";
@@ -347,15 +324,12 @@ chrome.runtime.onStartup.addListener(async () => {
 chrome.runtime.onInstalled.addListener(async () => {
   chrome.storage.local.remove(["cartify_last_result"]);
 
-  // Set default display mode
   const result = await chrome.storage.local.get("cartify_display_mode");
   const mode = result.cartify_display_mode || "popup";
   if (!result.cartify_display_mode) {
     await chrome.storage.local.set({ cartify_display_mode: "popup" });
   }
   await applyDisplayMode(mode);
-
-  // Ensure alarm exists (also called at top-level, but belt-and-suspenders)
   await ensureTokenRefreshAlarm();
 });
 
@@ -366,7 +340,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-// ── Alarm-based token refresh (MV3 safe) ──
+// ── Alarm handler ──
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === TOKEN_REFRESH_ALARM) {
@@ -375,5 +349,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         refreshToken();
       }
     });
+  }
+
+  if (alarm.name === AUTH_TIMEOUT_ALARM) {
+    // Auth timed out — close tab and reject
+    completeAuth({ ok: false, error: "Sign-in timed out. Please try again." });
   }
 });

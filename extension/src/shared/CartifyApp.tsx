@@ -314,8 +314,21 @@ export function CartifyApp({ mode }: CartifyAppProps) {
 
         <div className="space-y-3">
           {authLoading ? (
-            <div className="text-center space-y-2">
-              <p className="text-[14px] font-medium text-foreground">Signing in…</p>
+            <div className="flex flex-col items-center space-y-4 py-2">
+              <div className="relative h-10 w-10">
+                <div className="absolute inset-0 rounded-full border-2 border-muted" />
+                <div className="absolute inset-0 rounded-full border-2 border-t-foreground animate-spin" />
+              </div>
+              <div className="space-y-1 text-center">
+                <p className="text-[14px] font-medium text-foreground">Signing in…</p>
+                <p className="text-[11px] text-muted-foreground">Complete sign-in in the browser tab</p>
+              </div>
+              <button
+                onClick={() => setAuthLoading(false)}
+                className="text-[12px] text-muted-foreground/70 underline underline-offset-2 transition-colors hover:text-foreground"
+              >
+                Cancel
+              </button>
             </div>
           ) : (
             <>

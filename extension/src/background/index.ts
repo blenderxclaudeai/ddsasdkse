@@ -220,8 +220,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   // CARTIFY_TRYON_REQUEST
   if (msg.type === "CARTIFY_TRYON_REQUEST") {
-    const { payload } = msg;
-    handleTryOn(payload).then(sendResponse);
+    const { payload, background } = msg;
+    handleTryOn(payload, !!background).then(sendResponse);
     return true;
   }
 
@@ -236,13 +236,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // ── Try-on handler ──
 
-async function handleTryOn(payload: any): Promise<any> {
+async function handleTryOn(payload: any, background = false): Promise<any> {
   try {
-    const stored = await chrome.storage.local.get("cartify_auth_token");
+    const stored = await chrome.storage.local.get(["cartify_auth_token", "cartify_recent_tryons"]);
     const authToken = stored.cartify_auth_token;
 
     if (!authToken) {
       return { ok: false, error: "NOT_LOGGED_IN" };
+    }
+
+    // Duplicate protection: skip if same product_url was submitted within 60s
+    const recent: any[] = stored.cartify_recent_tryons || [];
+    if (payload.product_url) {
+      const now = Date.now();
+      const duplicate = recent.find(
+        (r) => r.product_url === payload.product_url && now - (r.timestamp || 0) < 60_000
+      );
+      if (duplicate) {
+        return { ok: true, duplicate: true, tryOnId: duplicate.tryOnId };
+      }
     }
 
     const res = await fetch(`${SUPABASE_URL}/functions/v1/tryon-request`, {
@@ -291,15 +303,19 @@ async function handleTryOn(payload: any): Promise<any> {
     };
 
     // Add to recent_tryons list (capped at 20)
-    const existing = await chrome.storage.local.get("cartify_recent_tryons");
-    const recent = existing.cartify_recent_tryons || [];
     recent.unshift(result);
     if (recent.length > 20) recent.length = 20;
 
-    await chrome.storage.local.set({
-      cartify_last_result: result,
+    const storageUpdate: Record<string, any> = {
       cartify_recent_tryons: recent,
-    });
+    };
+
+    // Only write last_result for foreground (modal) requests
+    if (!background) {
+      storageUpdate.cartify_last_result = result;
+    }
+
+    await chrome.storage.local.set(storageUpdate);
 
     return {
       ok: true,

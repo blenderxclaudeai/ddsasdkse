@@ -229,3 +229,159 @@ export function getRetryButton(): HTMLElement | null {
 function removeModal() {
   document.getElementById(MODAL_ID)?.remove();
 }
+
+// ── Inline card buttons for listing pages ──
+
+const CARD_BTN_ATTR = "data-cartify-card-btn";
+
+const HANGER_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7l7.4 6.16a1 1 0 0 1-.74 1.84H4.34a1 1 0 0 1-.74-1.84L11 7V5.73A2 2 0 0 1 12 2z"/><path d="M2 20h20"/></svg>`;
+const CHECK_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+const X_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+export type CardButtonState = "default" | "loading" | "done" | "error";
+
+export function injectCardButton(
+  container: HTMLElement,
+  onClick: () => void
+): HTMLElement {
+  // Don't double-inject
+  const existing = container.querySelector(`[${CARD_BTN_ATTR}]`);
+  if (existing) return existing as HTMLElement;
+
+  // Ensure container is positioned for absolute child
+  const pos = getComputedStyle(container).position;
+  if (pos === "static" || pos === "") {
+    container.style.position = "relative";
+  }
+
+  const btn = document.createElement("button");
+  btn.setAttribute(CARD_BTN_ATTR, "true");
+  btn.innerHTML = HANGER_SVG;
+  Object.assign(btn.style, {
+    position: "absolute",
+    top: "8px",
+    right: "8px",
+    zIndex: "999",
+    width: "30px",
+    height: "30px",
+    padding: "0",
+    border: "none",
+    borderRadius: "50%",
+    background: "rgba(23,23,23,0.7)",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    opacity: "0.6",
+    transition: "opacity 0.15s ease, transform 0.15s ease, background 0.15s ease",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+    fontFamily: "inherit",
+    lineHeight: "1",
+  });
+
+  btn.addEventListener("mouseenter", () => { btn.style.opacity = "1"; btn.style.transform = "scale(1.1)"; });
+  btn.addEventListener("mouseleave", () => {
+    if (btn.dataset.state !== "loading") {
+      btn.style.opacity = "0.6";
+      btn.style.transform = "scale(1)";
+    }
+  });
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClick();
+  });
+
+  container.appendChild(btn);
+  return btn;
+}
+
+export function setCardButtonState(btn: HTMLElement, state: CardButtonState) {
+  btn.dataset.state = state;
+
+  switch (state) {
+    case "loading":
+      btn.innerHTML = "";
+      btn.style.opacity = "1";
+      btn.style.background = "rgba(23,23,23,0.85)";
+      btn.style.animation = "cartify-spin 0.8s linear infinite";
+      btn.style.border = "2px solid rgba(255,255,255,0.3)";
+      btn.style.borderTopColor = "#fff";
+      break;
+    case "done":
+      btn.innerHTML = CHECK_SVG;
+      btn.style.opacity = "1";
+      btn.style.background = "#16a34a";
+      btn.style.animation = "none";
+      btn.style.border = "none";
+      setTimeout(() => {
+        if (btn.dataset.state === "done") setCardButtonState(btn, "default");
+      }, 2000);
+      break;
+    case "error":
+      btn.innerHTML = X_SVG;
+      btn.style.opacity = "1";
+      btn.style.background = "#dc2626";
+      btn.style.animation = "none";
+      btn.style.border = "none";
+      setTimeout(() => {
+        if (btn.dataset.state === "error") setCardButtonState(btn, "default");
+      }, 2000);
+      break;
+    default:
+      btn.innerHTML = HANGER_SVG;
+      btn.style.opacity = "0.6";
+      btn.style.background = "rgba(23,23,23,0.7)";
+      btn.style.animation = "none";
+      btn.style.border = "none";
+      break;
+  }
+}
+
+export function removeAllCardButtons(): void {
+  document.querySelectorAll(`[${CARD_BTN_ATTR}]`).forEach((el) => el.remove());
+}
+
+// ── Toast notification ──
+
+const TOAST_ID = "cartify-toast";
+
+export function showToastNotification(message: string, type: "success" | "error" = "success"): void {
+  // Remove existing
+  document.getElementById(TOAST_ID)?.remove();
+
+  const toast = document.createElement("div");
+  toast.id = TOAST_ID;
+  toast.textContent = message;
+  Object.assign(toast.style, {
+    position: "fixed",
+    bottom: "24px",
+    left: "24px",
+    zIndex: "2147483647",
+    padding: "10px 18px",
+    borderRadius: "10px",
+    background: type === "success" ? "#171717" : "#dc2626",
+    color: "#fff",
+    fontSize: "13px",
+    fontWeight: "500",
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+    opacity: "0",
+    transform: "translateY(10px)",
+    transition: "opacity 0.2s ease, transform 0.2s ease",
+  });
+
+  document.body.appendChild(toast);
+  // Trigger animation
+  requestAnimationFrame(() => {
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+  });
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(10px)";
+    setTimeout(() => toast.remove(), 200);
+  }, 3000);
+}

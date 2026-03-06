@@ -1,132 +1,61 @@
 
 
-## Revised Plan: Inline Cartify Buttons on Product Listing Pages
+## Fix List: Login, Product Focus, Extension Polish
 
-### Architecture: Lightweight Scan, Smart on Click
+### 1. Fix login flow — the /login 404 issue
 
-The content script stays lightweight during page scan. It only identifies likely product card containers and places a small Cartify button. No product data extraction happens until the user clicks.
+The screenshot shows `/login` returning a 404. The OAuth redirect URL in `extension/src/lib/auth.ts` uses `chrome.identity.getRedirectURL()` which should work for the extension flow. However, the `webAppSync.ts` content script still sends `VTO_SESSION_FROM_WEB` — this suggests the OAuth flow is opening a browser tab to the website instead of using `chrome.identity`. 
 
-### User Flow
+**Root cause:** The `chrome.identity.launchWebAuthFlow` redirect URL (`chrome.identity.getRedirectURL()`) must be registered in the backend's OAuth redirect allowlist. If it's not, the provider may fall back to a web redirect. Also, the `redirect_to` parameter in the auth URL needs to match the extension's redirect URL pattern exactly.
 
-```text
-Browse product grid
-  → Cartify detects card-like containers (lightweight DOM scan)
-  → Small Cartify icon appears on each card
-  → User clicks icon on an interesting item
-  → Extraction runs for that card only (image, title, URL, category)
-  → If extraction is incomplete, fall back to navigating/fetching the product page URL
-  → Try-on request fires in the background (no modal)
-  → Toast confirms "Try-on queued!"
-  → Result saved to showroom
-  → User keeps browsing
-```
+**Fix:** Ensure the auth URL includes the correct `redirect_to` for chrome.identity. The current code looks correct — the issue is likely on the backend OAuth config side. We need to verify the redirect URL is whitelisted. But from the code side, the flow should work. The `/login` 404 happens because the old OAuth config redirects to `/login`. We should add `/login` as a catch-all redirect to `/` in `App.tsx` so users never see a 404 there.
 
----
+**Files:** `src/App.tsx` — add a redirect from `/login` to `/`
 
-### New File: `extension/src/content/productGrid.ts`
+### 2. Remove non-person categories from extension
 
-**`isListingPage(): boolean`**
-- Checks URL patterns: `/collections/`, `/category/`, `/shop/`, `/search`, `/c/`, `/pl/`
-- Checks for grid-like structures: 4+ elements matching broad card selectors
-- Returns `true` if the page looks like a product listing
+Remove Home, Pets, Vehicle, Garden from `CATEGORY_GROUPS` in `Popup.tsx`. Keep only "You". Remove the tab bar entirely since there's only one group.
 
-**`findCardContainers(): HTMLElement[]`**
-- Returns raw DOM element references only — no data extraction
-- Scans for common card patterns:
-  - `[class*="product-card"]`, `[class*="product-item"]`, `[data-product-id]`, `[data-product]`
-  - `article` elements inside grid containers
-  - `<a>` tags containing `<img>` inside `[class*="grid"]` or list layouts
-- Filters out containers smaller than 80x80px
-- Returns the container elements, nothing else
+**File:** `extension/src/popup/Popup.tsx`
 
-**`extractFromCard(card: HTMLElement): ProductData | null`**
-- Called only on click, not during scan
-- Extracts from the clicked card: finds the primary `<img>` src, the `<a>` href, and text content for title
-- Runs category detection using existing keyword patterns from `productExtract.ts`
-- Returns `null` if insufficient data (no image found)
+### 3. Update "Try on anything" section — remove home/garden products
 
-**`extractFallbackFromLink(card: HTMLElement): string | null`**
-- If `extractFromCard` returns null, find the card's primary `<a>` href
-- Returns the product page URL so the background can attempt a server-side or deferred extraction
+Remove: Lamps, Chairs, Vases, Planters, Cushions from both `tryOnCategories` and `tryOnCategories2`. Keep only wearable/person items. The remaining person-focused items with white backgrounds: Dress, Sneakers, Watch, Sunglasses, Handbag, Ring, Jacket, Hat, Boots, Necklace, Blazer, Bracelet, Jeans, Heels.
 
----
+Update the section subtitle to remove "home decor, garden" language.
 
-### Changes to `extension/src/content/ui.ts`
+Update the FAQ answer about "What kind of products can I try on?" to remove home decor mention.
 
-**`injectCardButton(container: HTMLElement, onClick: () => void): HTMLElement`**
-- Creates a 30px circular button with a small Cartify icon (SVG hanger or shirt outline)
-- Positioned `absolute` top-right of the container (sets container to `position: relative` if not already)
-- Visual states:
-  - **Default**: semi-transparent (`opacity: 0.6`), full opacity on hover
-  - **Loading**: spinning border animation
-  - **Done**: green checkmark, reverts after 2s
-  - **Error**: red X, reverts after 2s
-- Uses a data attribute (`data-cartify-card-btn`) for easy cleanup
+**File:** `src/pages/LandingPage.tsx`
 
-**`showToastNotification(message: string, type?: "success" | "error")`**
-- Small fixed toast at bottom-left, auto-dismisses after 3s
-- Non-blocking, does not interrupt browsing
+### 4. Fix content script login pill text
 
-**`removeAllCardButtons()`**
-- Removes all injected card buttons (cleanup on navigation)
+Change "Log in to Cartify to try on" → "Log in" (shorter, cleaner).
 
----
+**File:** `extension/src/content/ui.ts`
 
-### Changes to `extension/src/content/index.ts`
+### 5. Add Settings screen to extension
 
-Update `evaluatePage()` to add a listing-page branch:
+Add a third screen "settings" accessible from the header (gear icon next to Sign Out). Settings page includes:
+- **Display mode**: Radio/toggle between "Popup" and "Side Panel" — stores preference in `chrome.storage.local` as `cartify_display_mode`
+- Sign Out button moved here
 
-1. **Product pages remain primary.** If `isProductPage()` returns true AND `isListingPage()` returns false, use the existing single-product flow (fixed "Try On" button + modal). No change to current behavior.
+**File:** `extension/src/popup/Popup.tsx`
 
-2. **Listing pages get card buttons.** If `isListingPage()` returns true AND the user is logged in:
-   - Call `findCardContainers()` to get raw elements
-   - For each container, call `injectCardButton(container, onClick)`
-   - `onClick` handler: calls `extractFromCard(card)` at click time. If extraction succeeds, send `CARTIFY_TRYON_REQUEST` to background with `background: true` flag. If extraction fails, try `extractFallbackFromLink(card)` and send with the URL for server-side extraction. Show toast feedback.
-   - Use `IntersectionObserver` to only inject buttons on cards visible in viewport
-   - Extend the existing `MutationObserver` to detect new cards from infinite scroll — debounce with 500ms, re-run `findCardContainers()` for new elements only
+### 6. Remaining VTO references
 
-3. **Mixed pages** (both product page and listing-like): Keep the product-page try-on flow as primary. Only add listing-card buttons if the page clearly has a product grid alongside the main product (e.g., "related products" sections). Do not automatically override the product-page experience.
+`webAppSync.ts` still uses `VTO_SESSION_FROM_WEB` message type and `background/index.ts` listens for it. Rename to `CARTIFY_SESSION_FROM_WEB` for consistency.
 
-4. **Cleanup**: On URL change, call `removeAllCardButtons()` alongside existing cleanup. Also track which containers already have buttons to avoid duplicates.
+**Files:** `extension/src/content/webAppSync.ts`, `extension/src/background/index.ts`
 
-5. **Logged-out state**: On listing pages, show login pills on cards (or skip card buttons entirely and rely on the existing fixed login pill).
+### Files summary
 
----
-
-### Changes to `extension/src/background/index.ts`
-
-Minimal changes to support concurrent inline requests:
-
-- **`background` flag**: When `CARTIFY_TRYON_REQUEST` payload includes `background: true`, skip writing to `cartify_last_result` (only append to `cartify_recent_tryons`). This prevents multiple concurrent requests from overwriting each other.
-- **Duplicate protection**: Before calling the edge function, check `cartify_recent_tryons` for a matching `product_url` submitted within the last 60 seconds. If found, return `{ ok: true, duplicate: true }` without re-requesting.
-- The `cartify_recent_tryons` array and showroom save flow remain unchanged.
-
----
-
-### What stays the same
-
-- Inline Cartify buttons on product cards
-- Background generation with no blocking modal
-- Toast feedback on click
-- Results saved to showroom via `cartify_recent_tryons`
-- Infinite scroll handling via MutationObserver
-- IntersectionObserver for performance
-- Existing product-page "Try On" button (unchanged)
-
----
-
-### Site support
-
-The card detection uses broad CSS selectors and structural heuristics. This provides a reasonable first-pass across many e-commerce sites. When card extraction is incomplete (no image or URL found in the card DOM), the system falls back gracefully to the product page link for deferred extraction. Detection accuracy will improve iteratively as we encounter more site structures.
-
----
-
-### Files Summary
-
-| File | Change |
-|------|--------|
-| `extension/src/content/productGrid.ts` | **New** — `isListingPage()`, `findCardContainers()`, `extractFromCard()`, `extractFallbackFromLink()` |
-| `extension/src/content/ui.ts` | Add `injectCardButton()`, `showToastNotification()`, `removeAllCardButtons()` |
-| `extension/src/content/index.ts` | Add listing-page branch in `evaluatePage()`, IntersectionObserver + MutationObserver for cards |
-| `extension/src/background/index.ts` | Add `background` flag handling, duplicate-click protection |
+| File | Changes |
+|------|---------|
+| `src/App.tsx` | Add `/login` redirect to `/` |
+| `src/pages/LandingPage.tsx` | Remove lamp/chair/vase/planter/cushion, update subtitle & FAQ |
+| `extension/src/popup/Popup.tsx` | Remove non-You categories, remove tab bar, add Settings screen with display mode toggle |
+| `extension/src/content/ui.ts` | Shorten login pill text to "Log in" |
+| `extension/src/content/webAppSync.ts` | Rename VTO_ message types to CARTIFY_ |
+| `extension/src/background/index.ts` | Rename VTO_ message types to CARTIFY_ |
 

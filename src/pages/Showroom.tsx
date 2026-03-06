@@ -79,8 +79,48 @@ export default function Showroom() {
   const completedResults = results.filter(r => r.result_image_url);
   const pendingResults = results.filter(r => !r.result_image_url);
 
+  const [shareToast, setShareToast] = useState<string | null>(null);
+
   const getAffiliateUrl = (r: TryonResult) =>
     `${SUPABASE_URL}/functions/v1/redirect?target=${encodeURIComponent(r.page_url)}&retailerDomain=${r.retailer_domain ?? ""}`;
+
+  const handleDownload = async (r: TryonResult) => {
+    try {
+      const res = await fetch(r.result_image_url!);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cartify-${r.title || "tryon"}-${r.id.slice(0, 6)}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      console.error("Download failed");
+    }
+  };
+
+  const handleShare = async (r: TryonResult) => {
+    try {
+      const res = await fetch(r.result_image_url!);
+      const blob = await res.blob();
+      const file = new File([blob], `cartify-${r.title || "tryon"}.jpg`, { type: blob.type });
+
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: r.title || "My try-on look" });
+      } else {
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type]: blob }),
+        ]);
+        setShareToast("Image copied to clipboard!");
+        setTimeout(() => setShareToast(null), 2500);
+      }
+    } catch {
+      setShareToast("Couldn't share — try downloading instead");
+      setTimeout(() => setShareToast(null), 2500);
+    }
+  };
 
   return (
     <ExtensionLayout>

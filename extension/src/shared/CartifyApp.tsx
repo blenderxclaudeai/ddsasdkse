@@ -273,6 +273,8 @@ export function CartifyApp({ mode }: CartifyAppProps) {
   const handleDisplayModeChange = (newMode: "popup" | "sidepanel") => {
     setDisplayMode(newMode);
     chrome.storage.local.set({ cartify_display_mode: newMode });
+    // Notify background to dynamically toggle popup vs side panel behavior
+    chrome.runtime.sendMessage({ type: "DISPLAY_MODE_CHANGED", mode: newMode });
   };
 
   const handleTryOnFromPanel = () => {

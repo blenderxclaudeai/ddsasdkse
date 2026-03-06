@@ -146,7 +146,7 @@ export default function Showroom() {
         {/* Header */}
         <div className="pt-2 text-center">
           <h1 className="text-[28px] font-semibold tracking-tight text-foreground">Showroom</h1>
-          <p className="mt-1 text-[14px] text-muted-foreground">See how products look on you</p>
+          <p className="mt-1 text-[14px] text-muted-foreground">Today's try-ons · resets daily</p>
         </div>
 
         {/* Content */}

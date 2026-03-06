@@ -14,11 +14,20 @@ const ALLOWED_REDIRECT_DOMAINS: string[] = [
 ];
 
 function isDomainAllowed(hostname: string): boolean {
-  // If allowlist is empty, allow all (development mode) — populate for production
-  if (ALLOWED_REDIRECT_DOMAINS.length === 0) return true;
+  // Read allowlist override from environment (comma-separated domains)
+  const envDomains = Deno.env.get("ALLOWED_REDIRECT_DOMAINS");
+  const domains = envDomains
+    ? envDomains.split(",").map((d) => d.trim()).filter(Boolean)
+    : ALLOWED_REDIRECT_DOMAINS;
+
+  // Fail closed in production: if no domains configured, block all redirects
+  if (domains.length === 0) {
+    console.warn("[redirect] No allowed domains configured — blocking redirect (fail-closed).");
+    return false;
+  }
 
   const normalized = hostname.toLowerCase().replace(/^www\./, "");
-  return ALLOWED_REDIRECT_DOMAINS.some((d) => {
+  return domains.some((d) => {
     const normalizedAllowed = d.toLowerCase().replace(/^www\./, "");
     return normalized === normalizedAllowed || normalized.endsWith(`.${normalizedAllowed}`);
   });

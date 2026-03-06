@@ -298,9 +298,15 @@ async function handleTryOn(payload: any): Promise<any> {
     }
 
     // Store only metadata locally (URLs, not base64 blobs) to avoid exceeding 10 MB quota
+    // Guard: never persist data URLs — they can be megabytes and blow the 10 MB quota
+    const safeImageUrl =
+      typeof data.resultImageUrl === "string" && data.resultImageUrl.startsWith("data:")
+        ? null
+        : data.resultImageUrl;
+
     const result = {
       tryOnId: data.tryOnId,
-      resultImageUrl: data.resultImageUrl,
+      resultImageUrl: safeImageUrl,
       product_url: payload.product_url,
       product_title: payload.product_title,
       timestamp: Date.now(),

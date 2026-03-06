@@ -12,6 +12,8 @@ import {
   setCardButtonState,
   removeAllCardButtons,
   showToastNotification,
+  injectCartButton,
+  setCartButtonDone,
 } from "./ui";
 
 /** Check if the current page looks like a product/shopping page */

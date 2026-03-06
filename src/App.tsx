@@ -11,6 +11,7 @@ import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
 import LandingPage from "./pages/LandingPage";
 import AuthCallback from "./pages/AuthCallback";
+import ExtensionAuth from "./pages/ExtensionAuth";
 
 const queryClient = new QueryClient();
 

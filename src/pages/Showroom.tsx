@@ -176,15 +176,31 @@ export default function Showroom() {
                           </div>
                         </div>
                       )}
-                      <a
-                        href={getAffiliateUrl(r)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-                      >
-                        <ShoppingCart size={12} />
-                        Add to Cart
-                      </a>
+                      <div className="mt-1.5 flex gap-1.5">
+                        <a
+                          href={getAffiliateUrl(r)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                        >
+                          <ShoppingCart size={12} />
+                          Add to Cart
+                        </a>
+                        <button
+                          onClick={() => handleDownload(r)}
+                          title="Download"
+                          className="flex items-center justify-center rounded-lg border border-border bg-background px-2 py-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                        >
+                          <Download size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleShare(r)}
+                          title="Share"
+                          className="flex items-center justify-center rounded-lg border border-border bg-background px-2 py-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                        >
+                          <Share2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

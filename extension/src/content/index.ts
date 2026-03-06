@@ -1,4 +1,5 @@
 import { extractProduct } from "./productExtract";
+import { isListingPage, findCardContainers, extractFromCard, extractFallbackFromLink } from "./productGrid";
 import {
   injectButton,
   injectLoginPill,
@@ -7,6 +8,10 @@ import {
   updateModalSuccess,
   updateModalError,
   getRetryButton,
+  injectCardButton,
+  setCardButtonState,
+  removeAllCardButtons,
+  showToastNotification,
 } from "./ui";
 
 /** Check if the current page looks like a product/shopping page */
@@ -49,6 +54,7 @@ function isProductPage(): boolean {
 function removeCartifyElements() {
   document.getElementById("cartify-tryon-btn")?.remove();
   removeLoginPill();
+  removeAllCardButtons();
 }
 
 /** Store detected product data for side panel / popup */
@@ -62,16 +68,130 @@ function storeDetectedProduct() {
   }
 }
 
+// ── Listing page: card button handling ──
+
+const injectedCards = new WeakSet<HTMLElement>();
+let listingObserver: IntersectionObserver | null = null;
+
+function setupListingButtons() {
+  const cards = findCardContainers();
+
+  if (!listingObserver) {
+    listingObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const card = entry.target as HTMLElement;
+            listingObserver?.unobserve(card);
+            injectCardButtonOnCard(card);
+          }
+        }
+      },
+      { rootMargin: "200px" }
+    );
+  }
+
+  for (const card of cards) {
+    if (injectedCards.has(card)) continue;
+    injectedCards.add(card);
+    listingObserver.observe(card);
+  }
+}
+
+function injectCardButtonOnCard(card: HTMLElement) {
+  const btn = injectCardButton(card, () => handleCardClick(card, btn));
+}
+
+function handleCardClick(card: HTMLElement, btn: HTMLElement) {
+  // Prevent double-click while loading
+  if (btn.dataset.state === "loading") return;
+
+  setCardButtonState(btn, "loading");
+
+  // Extract product data on click only
+  const product = extractFromCard(card);
+
+  if (product) {
+    chrome.runtime.sendMessage(
+      { type: "CARTIFY_TRYON_REQUEST", payload: product, background: true },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          setCardButtonState(btn, "error");
+          showToastNotification("Extension error", "error");
+          return;
+        }
+        if (response?.ok) {
+          if (response.duplicate) {
+            setCardButtonState(btn, "done");
+            showToastNotification("Already queued!");
+          } else {
+            setCardButtonState(btn, "done");
+            showToastNotification("Try-on queued!");
+          }
+        } else {
+          setCardButtonState(btn, "error");
+          showToastNotification(response?.error || "Request failed", "error");
+        }
+      }
+    );
+  } else {
+    // Fallback: try to get product page URL
+    const fallbackUrl = extractFallbackFromLink(card);
+    if (fallbackUrl) {
+      chrome.runtime.sendMessage(
+        {
+          type: "CARTIFY_TRYON_REQUEST",
+          payload: {
+            product_url: fallbackUrl,
+            product_title: "",
+            product_image: "",
+          },
+          background: true,
+        },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            setCardButtonState(btn, "error");
+            showToastNotification("Extension error", "error");
+            return;
+          }
+          if (response?.ok) {
+            setCardButtonState(btn, "done");
+            showToastNotification("Try-on queued!");
+          } else {
+            setCardButtonState(btn, "error");
+            showToastNotification(response?.error || "Could not extract product", "error");
+          }
+        }
+      );
+    } else {
+      setCardButtonState(btn, "error");
+      showToastNotification("Could not identify product", "error");
+    }
+  }
+}
+
+// ── Infinite scroll: debounced re-scan ──
+
+let scrollScanTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleListingRescan() {
+  if (scrollScanTimer) clearTimeout(scrollScanTimer);
+  scrollScanTimer = setTimeout(() => {
+    setupListingButtons();
+  }, 500);
+}
+
+// ── Page evaluation ──
+
 function evaluatePage() {
-  if (!isProductPage()) {
+  const productPage = isProductPage();
+  const listingPage = isListingPage();
+
+  if (!productPage && !listingPage) {
     removeCartifyElements();
-    // Clear pending product
     chrome.storage.local.remove("cartify_pending_product");
     return;
   }
-
-  // Store detected product for side panel
-  storeDetectedProduct();
 
   chrome.runtime.sendMessage({ type: "AUTH_GET_USER" }, (response) => {
     if (chrome.runtime.lastError) {
@@ -79,14 +199,51 @@ function evaluatePage() {
       return;
     }
 
-    if (response?.loggedIn) {
-      removeLoginPill();
-      if (!document.getElementById("cartify-tryon-btn")) {
-        injectButton(doTryOn);
+    const loggedIn = response?.loggedIn;
+
+    // Product page: primary experience (single "Try On" button + modal)
+    if (productPage && !listingPage) {
+      if (loggedIn) {
+        removeLoginPill();
+        removeAllCardButtons();
+        storeDetectedProduct();
+        if (!document.getElementById("cartify-tryon-btn")) {
+          injectButton(doTryOn);
+        }
+      } else {
+        document.getElementById("cartify-tryon-btn")?.remove();
+        injectLoginPill();
       }
-    } else {
+      return;
+    }
+
+    // Listing page: inline card buttons
+    if (listingPage && !productPage) {
       document.getElementById("cartify-tryon-btn")?.remove();
-      injectLoginPill();
+      if (loggedIn) {
+        removeLoginPill();
+        setupListingButtons();
+      } else {
+        removeAllCardButtons();
+        injectLoginPill();
+      }
+      return;
+    }
+
+    // Mixed: product page is primary, also inject card buttons on grids
+    if (productPage && listingPage) {
+      if (loggedIn) {
+        removeLoginPill();
+        storeDetectedProduct();
+        if (!document.getElementById("cartify-tryon-btn")) {
+          injectButton(doTryOn);
+        }
+        // Also inject card buttons on any product grids (e.g. "related products")
+        setupListingButtons();
+      } else {
+        document.getElementById("cartify-tryon-btn")?.remove();
+        injectLoginPill();
+      }
     }
   });
 }
@@ -109,7 +266,14 @@ function evaluatePage() {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       removeCartifyElements();
+      if (listingObserver) {
+        listingObserver.disconnect();
+        listingObserver = null;
+      }
       setTimeout(evaluatePage, 800);
+    } else {
+      // Same URL but DOM changed — possibly infinite scroll
+      scheduleListingRescan();
     }
   }).observe(document.body, { childList: true, subtree: true });
 })();

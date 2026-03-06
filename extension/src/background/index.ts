@@ -220,8 +220,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   // CARTIFY_TRYON_REQUEST
   if (msg.type === "CARTIFY_TRYON_REQUEST") {
-    const { payload } = msg;
-    handleTryOn(payload).then(sendResponse);
+    const { payload, background } = msg;
+    handleTryOn(payload, !!background).then(sendResponse);
     return true;
   }
 

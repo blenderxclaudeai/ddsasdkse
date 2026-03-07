@@ -92,8 +92,10 @@ async function refreshToken(): Promise<boolean> {
     });
 
     if (!res.ok) {
-      // Refresh token is dead — clear stale auth to force re-login
-      await chrome.storage.local.remove(["cartify_auth_token", "cartify_refresh_token", "cartify_user"]);
+      // Only clear auth on explicit auth rejection (400/401) — not on network/server errors
+      if (res.status === 400 || res.status === 401) {
+        await chrome.storage.local.remove(["cartify_auth_token", "cartify_refresh_token", "cartify_user"]);
+      }
       return false;
     }
 

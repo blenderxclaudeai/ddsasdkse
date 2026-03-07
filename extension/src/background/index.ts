@@ -258,7 +258,7 @@ async function addSessionItem(
         ? (() => { try { return new URL(payload.product_url).hostname.replace(/^www\./, ""); } catch { return null; } })()
         : null;
 
-      await fetch(`${SUPABASE_URL}/rest/v1/session_items`, {
+      const postRes = await fetch(`${SUPABASE_URL}/rest/v1/session_items`, {
         method: "POST",
         headers: { ...headers, Prefer: "return=minimal" },
         body: JSON.stringify({
@@ -274,6 +274,9 @@ async function addSessionItem(
           tryon_request_id: tryonRequestId || null,
         }),
       });
+      if (!postRes.ok) {
+        console.error("[Cartify] addSessionItem POST failed:", postRes.status, await postRes.text());
+      }
     }
   } catch (e) {
     console.error("[Cartify] addSessionItem error:", e);

@@ -780,66 +780,73 @@ export function CartifyApp({ mode }: CartifyAppProps) {
             )}
           </div>
         ) : screen === "profile" ? (
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            {CATEGORIES.map((cat) => {
-              const photo = photos.find((p) => p.category === cat.key);
-              return (
-                <div key={cat.key} className="group relative">
-                  {photosLoading ? (
-                    <div className="aspect-square rounded-xl bg-secondary animate-pulse" />
-                  ) : photo?.signedUrl ? (
-                    <div className="relative">
-                      <img
-                        src={photo.signedUrl}
-                        alt={cat.label}
-                        className="aspect-square w-full rounded-xl object-cover"
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-xl bg-foreground/0 opacity-0 transition-all group-hover:bg-foreground/40 group-hover:opacity-100">
-                        <label className="cursor-pointer rounded-lg bg-background/90 px-3 py-1.5 text-[11px] font-medium text-foreground transition-opacity hover:opacity-80">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) =>
-                              e.target.files?.[0] && handleUpload(cat.key, e.target.files[0])
-                            }
-                          />
-                          Replace
-                        </label>
-                        <button
-                          onClick={() => handleDeletePhoto(photo)}
-                          className="rounded-lg px-3 py-1.5 text-[11px] font-medium text-background transition-opacity hover:opacity-80 bg-destructive"
-                        >
-                          Delete
-                        </button>
+          <div className="space-y-5 pt-1">
+            {CATEGORY_GROUPS.map((group) => (
+              <div key={group.label}>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{group.label}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {group.categories.map((cat) => {
+                    const photo = photos.find((p) => p.category === cat.key);
+                    return (
+                      <div key={cat.key} className="group relative">
+                        {photosLoading ? (
+                          <div className="aspect-square rounded-xl bg-secondary animate-pulse" />
+                        ) : photo?.signedUrl ? (
+                          <div className="relative">
+                            <img
+                              src={photo.signedUrl}
+                              alt={cat.label}
+                              className="aspect-square w-full rounded-xl object-cover"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-xl bg-foreground/0 opacity-0 transition-all group-hover:bg-foreground/40 group-hover:opacity-100">
+                              <label className="cursor-pointer rounded-lg bg-background/90 px-3 py-1.5 text-[11px] font-medium text-foreground transition-opacity hover:opacity-80">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) =>
+                                    e.target.files?.[0] && handleUpload(cat.key, e.target.files[0])
+                                  }
+                                />
+                                Replace
+                              </label>
+                              <button
+                                onClick={() => handleDeletePhoto(photo)}
+                                className="rounded-lg px-3 py-1.5 text-[11px] font-medium text-background transition-opacity hover:opacity-80 bg-destructive"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                            <p className="mt-1.5 text-center text-[11px] font-medium text-muted-foreground">
+                              {cat.label}
+                            </p>
+                          </div>
+                        ) : (
+                          <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-background text-muted-foreground transition-colors hover:bg-secondary/50">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) =>
+                                e.target.files?.[0] && handleUpload(cat.key, e.target.files[0])
+                              }
+                            />
+                            {uploading === cat.key ? (
+                              <span className="text-[12px]">Uploading…</span>
+                            ) : (
+                              <>
+                                <span className="text-[18px] leading-none">+</span>
+                                <span className="mt-1 text-[11px] font-medium">{cat.label}</span>
+                              </>
+                            )}
+                          </label>
+                        )}
                       </div>
-                      <p className="mt-1.5 text-center text-[11px] font-medium text-muted-foreground">
-                        {cat.label}
-                      </p>
-                    </div>
-                  ) : (
-                    <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-background text-muted-foreground transition-colors hover:bg-secondary/50">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) =>
-                          e.target.files?.[0] && handleUpload(cat.key, e.target.files[0])
-                        }
-                      />
-                      {uploading === cat.key ? (
-                        <span className="text-[12px]">Uploading…</span>
-                      ) : (
-                        <>
-                          <span className="text-[18px] leading-none">+</span>
-                          <span className="mt-1 text-[11px] font-medium">{cat.label}</span>
-                        </>
-                      )}
-                    </label>
-                  )}
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         ) : screen === "showroom" ? (
           /* ── SHOWROOM CONTENT ── */

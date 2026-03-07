@@ -132,7 +132,7 @@ export default function Profile() {
         {/* Tabbed photo grid */}
         <div className="flex-1 overflow-hidden py-4">
           <p className="text-center text-[12px] text-muted-foreground">Your photos for virtual try-on</p>
-          <Tabs defaultValue="you" className="mt-3">
+          <Tabs defaultValue="body" className="mt-3">
             <TabsList className="w-full justify-center">
               {CATEGORY_GROUPS.map(group => (
                 <TabsTrigger key={group.key} value={group.key} className="text-[12px]">

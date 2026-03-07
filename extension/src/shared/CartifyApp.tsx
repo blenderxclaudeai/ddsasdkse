@@ -125,7 +125,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
   // Initialize auth + pending product
   useEffect(() => {
     chrome.storage.local.get(
-      ["cartify_auth_token", "cartify_user", "cartify_display_mode", "cartify_pending_product"],
+      ["cartify_auth_token", "cartify_user", "cartify_display_mode", "cartify_pending_product", "cartify_active_coupons"],
       (result) => {
         if (result.cartify_auth_token && result.cartify_user) {
           setStoredUser(result.cartify_user);
@@ -136,6 +136,9 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         }
         if (result.cartify_pending_product) {
           setPendingProduct(result.cartify_pending_product);
+        }
+        if (result.cartify_active_coupons) {
+          setActiveCoupons(result.cartify_active_coupons);
         }
         setLoading(false);
       }

@@ -127,6 +127,8 @@ function handleCartClick(card: HTMLElement, btn: HTMLElement) {
       if (response?.ok) {
         setCartButtonDone(btn);
         showToastNotification("Added to cart!");
+      } else {
+        showToastNotification(response?.error || "Sign in to add to cart", "error");
       }
     }
   );

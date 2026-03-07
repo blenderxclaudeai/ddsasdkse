@@ -92,8 +92,10 @@ async function refreshToken(): Promise<boolean> {
     });
 
     if (!res.ok) {
-      // Refresh token is dead — clear stale auth to force re-login
-      await chrome.storage.local.remove(["cartify_auth_token", "cartify_refresh_token", "cartify_user"]);
+      // Only clear auth on explicit auth rejection (400/401) — not on network/server errors
+      if (res.status === 400 || res.status === 401) {
+        await chrome.storage.local.remove(["cartify_auth_token", "cartify_refresh_token", "cartify_user"]);
+      }
       return false;
     }
 
@@ -121,6 +123,7 @@ async function refreshToken(): Promise<boolean> {
 
 function completeAuth(result: { ok: boolean; error?: string }) {
   chrome.alarms.clear(AUTH_TIMEOUT_ALARM);
+  chrome.storage.local.remove("cartify_auth_pending");
   if (pendingAuthTabId !== null) {
     try { chrome.tabs.remove(pendingAuthTabId); } catch {}
     pendingAuthTabId = null;
@@ -360,8 +363,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!msg?.type) return;
 
   if (msg.type === "AUTH_LOGIN") {
-    doOAuthLogin(msg.provider || "google").then(sendResponse);
-    return true;
+    // Fire-and-forget: respond immediately so the popup doesn't block
+    // The popup detects auth completion via chrome.storage.onChanged
+    chrome.storage.local.set({ cartify_auth_pending: true });
+    doOAuthLogin(msg.provider || "google").then(() => {
+      // Auth completed (success or failure) — clear pending flag
+      chrome.storage.local.remove("cartify_auth_pending");
+    });
+    sendResponse({ ok: true, pending: true });
+    return false;
   }
 
   if (msg.type === "AUTH_LOGOUT") {

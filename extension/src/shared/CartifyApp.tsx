@@ -117,11 +117,14 @@ export function CartifyApp({ mode }: CartifyAppProps) {
   // Initialize auth + pending product
   useEffect(() => {
     chrome.storage.local.get(
-      ["cartify_auth_token", "cartify_user", "cartify_display_mode", "cartify_active_coupons"],
+      ["cartify_auth_token", "cartify_user", "cartify_display_mode", "cartify_active_coupons", "cartify_auth_pending"],
       (result) => {
         if (result.cartify_auth_token && result.cartify_user) {
           setStoredUser(result.cartify_user);
           setUser({ id: result.cartify_user.id });
+        } else if (result.cartify_auth_pending) {
+          // Auth is in progress (tab open) — show loading state
+          setAuthLoading(true);
         }
         if (result.cartify_display_mode) {
           setDisplayMode(result.cartify_display_mode);
@@ -287,10 +290,9 @@ export function CartifyApp({ mode }: CartifyAppProps) {
 
   const handleOAuth = async (provider: "google" | "apple") => {
     setAuthLoading(true);
-    const result = await signInWithOAuth(provider);
-    if (!result.ok) {
-      setAuthLoading(false);
-    }
+    // Fire-and-forget: don't await the full auth flow
+    // Auth completion is detected via the storage.onChanged listener above
+    signInWithOAuth(provider);
   };
 
   const handleSignOut = async () => {

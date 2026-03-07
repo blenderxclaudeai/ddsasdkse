@@ -288,7 +288,7 @@ async function addSessionItem(
 
   try {
     // Check if item already exists in this session
-    const checkRes = await fetch(
+    const checkRes = await fetchWithAutoRefresh(
       `${SUPABASE_URL}/rest/v1/session_items?session_id=eq.${sessionId}&product_url=eq.${encodeURIComponent(payload.product_url)}&limit=1`,
       { headers }
     );

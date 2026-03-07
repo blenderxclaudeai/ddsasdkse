@@ -1066,6 +1066,20 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         )}
       </div>
 
+      {/* ── Session total bar ── */}
+      {screen === "session" && sessionItems.length > 0 && sessionTotal > 0 && (
+        <div className="shrink-0 border-t bg-secondary/30 px-5 py-2.5">
+          <div className="flex items-center justify-between">
+            <p className="text-[12px] text-muted-foreground">
+              Total · {sessionItems.length} item{sessionItems.length !== 1 ? "s" : ""}
+            </p>
+            <p className="text-[14px] font-semibold text-foreground">
+              ~{currencySymbol}{sessionTotal.toFixed(2)}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Fixed bottom nav ── */}
       <div className="shrink-0 border-t">
         <nav className="flex items-center justify-around px-2 py-2.5">

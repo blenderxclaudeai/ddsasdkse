@@ -362,8 +362,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!msg?.type) return;
 
   if (msg.type === "AUTH_LOGIN") {
-    doOAuthLogin(msg.provider || "google").then(sendResponse);
-    return true;
+    // Fire-and-forget: respond immediately so the popup doesn't block
+    // The popup detects auth completion via chrome.storage.onChanged
+    chrome.storage.local.set({ cartify_auth_pending: true });
+    doOAuthLogin(msg.provider || "google").then(() => {
+      // Auth completed (success or failure) — clear pending flag
+      chrome.storage.local.remove("cartify_auth_pending");
+    });
+    sendResponse({ ok: true, pending: true });
+    return false;
   }
 
   if (msg.type === "AUTH_LOGOUT") {

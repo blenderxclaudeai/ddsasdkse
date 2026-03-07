@@ -342,10 +342,13 @@ async function addSessionItem(
       });
       if (!postRes.ok) {
         console.error("[Cartify] addSessionItem POST failed:", postRes.status, await postRes.text());
+        return false;
       }
     }
+    return true;
   } catch (e) {
     console.error("[Cartify] addSessionItem error:", e);
+    return false;
   }
 }
 

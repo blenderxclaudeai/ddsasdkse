@@ -162,6 +162,11 @@ export function CartifyApp({ mode }: CartifyAppProps) {
       if (changes.cartify_pending_product?.newValue) {
         setPendingProduct(changes.cartify_pending_product.newValue);
       }
+      if (changes.cartify_active_coupons?.newValue) {
+        setActiveCoupons(changes.cartify_active_coupons.newValue);
+      } else if (changes.cartify_active_coupons && !changes.cartify_active_coupons.newValue) {
+        setActiveCoupons([]);
+      }
     };
     chrome.storage.onChanged.addListener(listener);
     return () => chrome.storage.onChanged.removeListener(listener);

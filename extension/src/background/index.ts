@@ -55,11 +55,25 @@ async function doLogout(): Promise<void> {
 }
 
 async function getAuthState(): Promise<{ loggedIn: boolean; user: any | null }> {
-  const result = await chrome.storage.local.get(["cartify_auth_token", "cartify_user"]);
-  return {
-    loggedIn: !!result.cartify_auth_token,
-    user: result.cartify_user || null,
-  };
+  const result = await chrome.storage.local.get(["cartify_auth_token", "cartify_refresh_token", "cartify_user"]);
+  if (!result.cartify_auth_token) {
+    return { loggedIn: false, user: null };
+  }
+
+  // If token is expired, try to refresh before reporting auth state
+  if (isTokenExpired(result.cartify_auth_token)) {
+    if (result.cartify_refresh_token) {
+      const refreshed = await refreshToken();
+      if (!refreshed) {
+        return { loggedIn: false, user: null };
+      }
+      const updated = await chrome.storage.local.get("cartify_user");
+      return { loggedIn: true, user: updated.cartify_user || result.cartify_user || null };
+    }
+    return { loggedIn: false, user: null };
+  }
+
+  return { loggedIn: true, user: result.cartify_user || null };
 }
 
 async function refreshToken(): Promise<boolean> {
@@ -143,16 +157,64 @@ async function applyDisplayMode(mode: "popup" | "sidepanel") {
   }
 }
 
+// ── JWT helpers ──
+
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    // Consider expired if less than 60s remaining
+    return payload.exp * 1000 < Date.now() + 60_000;
+  } catch {
+    return true;
+  }
+}
+
 // ── Shopping Session helpers ──
 
 async function getAuthHeaders(): Promise<Record<string, string> | null> {
   const stored = await chrome.storage.local.get("cartify_auth_token");
   if (!stored.cartify_auth_token) return null;
+
+  // Proactively refresh if token is expired or about to expire
+  if (isTokenExpired(stored.cartify_auth_token)) {
+    const refreshed = await refreshToken();
+    if (!refreshed) return null;
+    const updated = await chrome.storage.local.get("cartify_auth_token");
+    if (!updated.cartify_auth_token) return null;
+    return {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${updated.cartify_auth_token}`,
+      "Content-Type": "application/json",
+    };
+  }
+
   return {
     apikey: SUPABASE_ANON_KEY,
     Authorization: `Bearer ${stored.cartify_auth_token}`,
     "Content-Type": "application/json",
   };
+}
+
+/**
+ * Fetch wrapper that retries once on 401/403 after refreshing the token.
+ */
+async function fetchWithAutoRefresh(
+  url: string,
+  init: RequestInit & { headers: Record<string, string> }
+): Promise<Response> {
+  const res = await fetch(url, init);
+  if (res.status === 401 || res.status === 403) {
+    const refreshed = await refreshToken();
+    if (!refreshed) return res;
+    const updated = await chrome.storage.local.get("cartify_auth_token");
+    if (!updated.cartify_auth_token) return res;
+    const newHeaders = {
+      ...init.headers,
+      Authorization: `Bearer ${updated.cartify_auth_token}`,
+    };
+    return fetch(url, { ...init, headers: newHeaders });
+  }
+  return res;
 }
 
 async function ensureSession(): Promise<string | null> {
@@ -165,7 +227,7 @@ async function ensureSession(): Promise<string | null> {
 
   try {
     // Check for existing active session that hasn't expired
-    const res = await fetch(
+    const res = await fetchWithAutoRefresh(
       `${SUPABASE_URL}/rest/v1/shopping_sessions?user_id=eq.${userId}&is_active=eq.true&expires_at=gt.${new Date().toISOString()}&order=started_at.desc&limit=1`,
       { headers }
     );
@@ -176,7 +238,7 @@ async function ensureSession(): Promise<string | null> {
     }
 
     // Deactivate any expired sessions still marked active
-    await fetch(
+    await fetchWithAutoRefresh(
       `${SUPABASE_URL}/rest/v1/shopping_sessions?user_id=eq.${userId}&is_active=eq.true&expires_at=lte.${new Date().toISOString()}`,
       {
         method: "PATCH",
@@ -186,7 +248,7 @@ async function ensureSession(): Promise<string | null> {
     ).catch(() => {});
 
     // Create new session
-    const createRes = await fetch(`${SUPABASE_URL}/rest/v1/shopping_sessions`, {
+    const createRes = await fetchWithAutoRefresh(`${SUPABASE_URL}/rest/v1/shopping_sessions`, {
       method: "POST",
       headers: { ...headers, Prefer: "return=representation" },
       body: JSON.stringify({ user_id: userId }),
@@ -226,7 +288,7 @@ async function addSessionItem(
 
   try {
     // Check if item already exists in this session
-    const checkRes = await fetch(
+    const checkRes = await fetchWithAutoRefresh(
       `${SUPABASE_URL}/rest/v1/session_items?session_id=eq.${sessionId}&product_url=eq.${encodeURIComponent(payload.product_url)}&limit=1`,
       { headers }
     );
@@ -241,7 +303,7 @@ async function addSessionItem(
       if (inCart) updateBody.in_cart = true;
       if (tryonRequestId) updateBody.tryon_request_id = tryonRequestId;
 
-      const patchRes = await fetch(
+      const patchRes = await fetchWithAutoRefresh(
         `${SUPABASE_URL}/rest/v1/session_items?id=eq.${existing[0].id}`,
         {
           method: "PATCH",
@@ -258,7 +320,7 @@ async function addSessionItem(
         ? (() => { try { return new URL(payload.product_url).hostname.replace(/^www\./, ""); } catch { return null; } })()
         : null;
 
-      const postRes = await fetch(`${SUPABASE_URL}/rest/v1/session_items`, {
+      const postRes = await fetchWithAutoRefresh(`${SUPABASE_URL}/rest/v1/session_items`, {
         method: "POST",
         headers: { ...headers, Prefer: "return=minimal" },
         body: JSON.stringify({
@@ -361,7 +423,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const headers = await getAuthHeaders();
       if (!headers) { sendResponse({ ok: false }); return; }
       try {
-        const res = await fetch(
+        const res = await fetchWithAutoRefresh(
           `${SUPABASE_URL}/rest/v1/retailer_coupons?domain=eq.${encodeURIComponent(msg.domain)}&is_active=eq.true&select=code,description,discount_type,discount_value,min_purchase`,
           { headers }
         );
@@ -392,10 +454,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 async function handleTryOn(payload: any, background = false): Promise<any> {
   try {
     const stored = await chrome.storage.local.get(["cartify_auth_token", "cartify_recent_tryons"]);
-    const authToken = stored.cartify_auth_token;
+    let authToken = stored.cartify_auth_token;
 
     if (!authToken) {
       return { ok: false, error: "NOT_LOGGED_IN" };
+    }
+
+    // Proactively refresh expired token
+    if (isTokenExpired(authToken)) {
+      const refreshed = await refreshToken();
+      if (!refreshed) {
+        return { ok: false, error: "NOT_LOGGED_IN" };
+      }
+      const updated = await chrome.storage.local.get("cartify_auth_token");
+      authToken = updated.cartify_auth_token;
+      if (!authToken) return { ok: false, error: "NOT_LOGGED_IN" };
     }
 
     // Duplicate protection
@@ -410,20 +483,41 @@ async function handleTryOn(payload: any, background = false): Promise<any> {
       }
     }
 
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/tryon-request`, {
+    const tryOnBody = JSON.stringify({
+      pageUrl: payload.product_url,
+      imageUrl: payload.product_image,
+      title: payload.product_title,
+      category: payload.product_category || undefined,
+    });
+
+    let res = await fetch(`${SUPABASE_URL}/functions/v1/tryon-request`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${authToken}`,
       },
-      body: JSON.stringify({
-        pageUrl: payload.product_url,
-        imageUrl: payload.product_image,
-        title: payload.product_title,
-        category: payload.product_category || undefined,
-      }),
+      body: tryOnBody,
     });
+
+    // Retry once on auth failure
+    if (res.status === 401 || res.status === 403) {
+      const refreshed = await refreshToken();
+      if (refreshed) {
+        const updated = await chrome.storage.local.get("cartify_auth_token");
+        if (updated.cartify_auth_token) {
+          res = await fetch(`${SUPABASE_URL}/functions/v1/tryon-request`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${updated.cartify_auth_token}`,
+            },
+            body: tryOnBody,
+          });
+        }
+      }
+    }
 
     let data: any;
     try {

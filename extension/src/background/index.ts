@@ -279,16 +279,16 @@ async function addSessionItem(
   interactionType: string,
   inCart: boolean = false,
   tryonRequestId?: string
-): Promise<void> {
+): Promise<boolean> {
   const headers = await getAuthHeaders();
-  if (!headers) return;
+  if (!headers) return false;
 
   const stored = await chrome.storage.local.get("cartify_user");
   const userId = stored.cartify_user?.id;
-  if (!userId) return;
+  if (!userId) return false;
 
   const sessionId = await ensureSession();
-  if (!sessionId) return;
+  if (!sessionId) return false;
 
   try {
     // Check if item already exists in this session

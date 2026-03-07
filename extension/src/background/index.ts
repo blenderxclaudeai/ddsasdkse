@@ -143,16 +143,64 @@ async function applyDisplayMode(mode: "popup" | "sidepanel") {
   }
 }
 
+// ── JWT helpers ──
+
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    // Consider expired if less than 60s remaining
+    return payload.exp * 1000 < Date.now() + 60_000;
+  } catch {
+    return true;
+  }
+}
+
 // ── Shopping Session helpers ──
 
 async function getAuthHeaders(): Promise<Record<string, string> | null> {
   const stored = await chrome.storage.local.get("cartify_auth_token");
   if (!stored.cartify_auth_token) return null;
+
+  // Proactively refresh if token is expired or about to expire
+  if (isTokenExpired(stored.cartify_auth_token)) {
+    const refreshed = await refreshToken();
+    if (!refreshed) return null;
+    const updated = await chrome.storage.local.get("cartify_auth_token");
+    if (!updated.cartify_auth_token) return null;
+    return {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${updated.cartify_auth_token}`,
+      "Content-Type": "application/json",
+    };
+  }
+
   return {
     apikey: SUPABASE_ANON_KEY,
     Authorization: `Bearer ${stored.cartify_auth_token}`,
     "Content-Type": "application/json",
   };
+}
+
+/**
+ * Fetch wrapper that retries once on 401/403 after refreshing the token.
+ */
+async function fetchWithAutoRefresh(
+  url: string,
+  init: RequestInit & { headers: Record<string, string> }
+): Promise<Response> {
+  const res = await fetch(url, init);
+  if (res.status === 401 || res.status === 403) {
+    const refreshed = await refreshToken();
+    if (!refreshed) return res;
+    const updated = await chrome.storage.local.get("cartify_auth_token");
+    if (!updated.cartify_auth_token) return res;
+    const newHeaders = {
+      ...init.headers,
+      Authorization: `Bearer ${updated.cartify_auth_token}`,
+    };
+    return fetch(url, { ...init, headers: newHeaders });
+  }
+  return res;
 }
 
 async function ensureSession(): Promise<string | null> {

@@ -334,6 +334,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === "CARTIFY_CHECK_COUPONS") {
+    (async () => {
+      const headers = await getAuthHeaders();
+      if (!headers) { sendResponse({ ok: false }); return; }
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/retailer_coupons?domain=eq.${encodeURIComponent(msg.domain)}&is_active=eq.true&select=code,description,discount_type,discount_value,min_purchase`,
+          { headers }
+        );
+        const coupons = await res.json();
+        if (Array.isArray(coupons) && coupons.length > 0) {
+          await chrome.storage.local.set({ cartify_active_coupons: coupons });
+        } else {
+          await chrome.storage.local.remove("cartify_active_coupons");
+        }
+        sendResponse({ ok: true, count: Array.isArray(coupons) ? coupons.length : 0 });
+      } catch {
+        sendResponse({ ok: false });
+      }
+    })();
+    return true;
+  }
+
   if (msg.type === "DISPLAY_MODE_CHANGED") {
     applyDisplayMode(msg.mode).then(() => sendResponse({ ok: true }));
     return true;

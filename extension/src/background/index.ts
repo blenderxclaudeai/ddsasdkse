@@ -412,15 +412,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg.type === "CARTIFY_ADD_TO_CART") {
-    addSessionItem(msg.payload, "cart", true).then(() => {
-      sendResponse({ ok: true });
+    addSessionItem(msg.payload, "cart", true).then((ok) => {
+      sendResponse({ ok });
     });
     return true;
   }
 
   if (msg.type === "CARTIFY_SAVE_PRODUCT") {
-    addSessionItem(msg.payload, "saved").then(() => {
-      sendResponse({ ok: true });
+    addSessionItem(msg.payload, "saved").then((ok) => {
+      sendResponse({ ok });
     });
     return true;
   }

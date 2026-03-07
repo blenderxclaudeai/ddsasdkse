@@ -55,11 +55,25 @@ async function doLogout(): Promise<void> {
 }
 
 async function getAuthState(): Promise<{ loggedIn: boolean; user: any | null }> {
-  const result = await chrome.storage.local.get(["cartify_auth_token", "cartify_user"]);
-  return {
-    loggedIn: !!result.cartify_auth_token,
-    user: result.cartify_user || null,
-  };
+  const result = await chrome.storage.local.get(["cartify_auth_token", "cartify_refresh_token", "cartify_user"]);
+  if (!result.cartify_auth_token) {
+    return { loggedIn: false, user: null };
+  }
+
+  // If token is expired, try to refresh before reporting auth state
+  if (isTokenExpired(result.cartify_auth_token)) {
+    if (result.cartify_refresh_token) {
+      const refreshed = await refreshToken();
+      if (!refreshed) {
+        return { loggedIn: false, user: null };
+      }
+      const updated = await chrome.storage.local.get("cartify_user");
+      return { loggedIn: true, user: updated.cartify_user || result.cartify_user || null };
+    }
+    return { loggedIn: false, user: null };
+  }
+
+  return { loggedIn: true, user: result.cartify_user || null };
 }
 
 async function refreshToken(): Promise<boolean> {

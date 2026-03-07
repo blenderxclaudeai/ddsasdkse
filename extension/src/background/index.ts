@@ -123,6 +123,7 @@ async function refreshToken(): Promise<boolean> {
 
 function completeAuth(result: { ok: boolean; error?: string }) {
   chrome.alarms.clear(AUTH_TIMEOUT_ALARM);
+  chrome.storage.local.remove("cartify_auth_pending");
   if (pendingAuthTabId !== null) {
     try { chrome.tabs.remove(pendingAuthTabId); } catch {}
     pendingAuthTabId = null;

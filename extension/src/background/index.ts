@@ -238,7 +238,7 @@ async function ensureSession(): Promise<string | null> {
     }
 
     // Deactivate any expired sessions still marked active
-    await fetch(
+    await fetchWithAutoRefresh(
       `${SUPABASE_URL}/rest/v1/shopping_sessions?user_id=eq.${userId}&is_active=eq.true&expires_at=lte.${new Date().toISOString()}`,
       {
         method: "PATCH",

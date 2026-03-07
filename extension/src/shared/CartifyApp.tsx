@@ -420,17 +420,6 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     }
   };
 
-  const handleTryOnFromPanel = () => {
-    if (!pendingProduct) return;
-    chrome.runtime.sendMessage(
-      { type: "CARTIFY_TRYON_REQUEST", payload: pendingProduct },
-      (response) => {
-        if (response?.ok) {
-          setScreen("showroom");
-        }
-      }
-    );
-  };
 
   const handleRemoveSessionItem = async (item: SessionItem) => {
     const stored = await chrome.storage.local.get("cartify_auth_token");

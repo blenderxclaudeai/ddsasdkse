@@ -317,7 +317,9 @@ async function addSessionItem(
       );
       if (!patchRes.ok) {
         console.error("[Cartify] addSessionItem PATCH failed:", patchRes.status, await patchRes.text());
+        return false;
       }
+      return true;
     } else {
       // Insert new item
       const domain = payload.product_url

@@ -320,7 +320,7 @@ async function addSessionItem(
         ? (() => { try { return new URL(payload.product_url).hostname.replace(/^www\./, ""); } catch { return null; } })()
         : null;
 
-      const postRes = await fetch(`${SUPABASE_URL}/rest/v1/session_items`, {
+      const postRes = await fetchWithAutoRefresh(`${SUPABASE_URL}/rest/v1/session_items`, {
         method: "POST",
         headers: { ...headers, Prefer: "return=minimal" },
         body: JSON.stringify({

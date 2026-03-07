@@ -44,12 +44,6 @@ interface PhotoRecord {
   signedUrl?: string;
 }
 
-interface PendingProduct {
-  product_url: string;
-  product_title: string;
-  product_image: string;
-  product_category?: string;
-}
 
 const CATEGORY_GROUPS = [
   {
@@ -115,8 +109,6 @@ export function CartifyApp({ mode }: CartifyAppProps) {
   // Settings state
   const [displayMode, setDisplayMode] = useState<"popup" | "sidepanel">(mode);
 
-  // Pending product from content script
-  const [pendingProduct, setPendingProduct] = useState<PendingProduct | null>(null);
 
   // Coupon state
   const [activeCoupons, setActiveCoupons] = useState<any[]>([]);
@@ -125,7 +117,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
   // Initialize auth + pending product
   useEffect(() => {
     chrome.storage.local.get(
-      ["cartify_auth_token", "cartify_user", "cartify_display_mode", "cartify_pending_product", "cartify_active_coupons"],
+      ["cartify_auth_token", "cartify_user", "cartify_display_mode", "cartify_active_coupons"],
       (result) => {
         if (result.cartify_auth_token && result.cartify_user) {
           setStoredUser(result.cartify_user);
@@ -133,9 +125,6 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         }
         if (result.cartify_display_mode) {
           setDisplayMode(result.cartify_display_mode);
-        }
-        if (result.cartify_pending_product) {
-          setPendingProduct(result.cartify_pending_product);
         }
         if (result.cartify_active_coupons) {
           setActiveCoupons(result.cartify_active_coupons);
@@ -158,9 +147,6 @@ export function CartifyApp({ mode }: CartifyAppProps) {
       if (changes.cartify_auth_token && !changes.cartify_auth_token.newValue) {
         setUser(null);
         setStoredUser(null);
-      }
-      if (changes.cartify_pending_product?.newValue) {
-        setPendingProduct(changes.cartify_pending_product.newValue);
       }
       if (changes.cartify_active_coupons?.newValue) {
         setActiveCoupons(changes.cartify_active_coupons.newValue);
@@ -434,17 +420,6 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     }
   };
 
-  const handleTryOnFromPanel = () => {
-    if (!pendingProduct) return;
-    chrome.runtime.sendMessage(
-      { type: "CARTIFY_TRYON_REQUEST", payload: pendingProduct },
-      (response) => {
-        if (response?.ok) {
-          setScreen("showroom");
-        }
-      }
-    );
-  };
 
   const handleRemoveSessionItem = async (item: SessionItem) => {
     const stored = await chrome.storage.local.get("cartify_auth_token");
@@ -636,29 +611,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         </div>
       </div>
 
-      {/* ── Pending product banner ── */}
-      {pendingProduct && screen !== "settings" && (
-        <div className="shrink-0 mx-5 mb-2 rounded-xl border border-border bg-secondary/50 p-3">
-          <div className="flex items-center gap-3">
-            <img
-              src={pendingProduct.product_image}
-              alt={pendingProduct.product_title}
-              className="h-12 w-12 rounded-lg object-cover"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-medium text-foreground truncate">
-                {pendingProduct.product_title}
-              </p>
-              <button
-                onClick={handleTryOnFromPanel}
-                className="mt-1 rounded-lg bg-foreground px-3 py-1 text-[11px] font-medium text-background transition-opacity hover:opacity-80"
-              >
-                Try On
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* ── Fixed sub-header ── */}
       {screen === "session" ? (
@@ -759,7 +712,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                       </p>
                       {cartTotal > 0 && (
                         <p className="text-[13px] font-semibold text-foreground">
-                          ~${cartTotal.toFixed(2)}
+                          ~{currencySymbol}{cartTotal.toFixed(2)}
                         </p>
                       )}
                     </div>

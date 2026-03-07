@@ -164,7 +164,7 @@ async function ensureSession(): Promise<string | null> {
   if (!userId) return null;
 
   try {
-    // Check for existing active session
+    // Check for existing active session that hasn't expired
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/shopping_sessions?user_id=eq.${userId}&is_active=eq.true&expires_at=gt.${new Date().toISOString()}&order=started_at.desc&limit=1`,
       { headers }
@@ -175,12 +175,28 @@ async function ensureSession(): Promise<string | null> {
       return sessions[0].id;
     }
 
+    // Deactivate any expired sessions still marked active
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/shopping_sessions?user_id=eq.${userId}&is_active=eq.true&expires_at=lte.${new Date().toISOString()}`,
+      {
+        method: "PATCH",
+        headers: { ...headers, Prefer: "return=minimal" },
+        body: JSON.stringify({ is_active: false }),
+      }
+    ).catch(() => {});
+
     // Create new session
     const createRes = await fetch(`${SUPABASE_URL}/rest/v1/shopping_sessions`, {
       method: "POST",
       headers: { ...headers, Prefer: "return=representation" },
       body: JSON.stringify({ user_id: userId }),
     });
+
+    if (!createRes.ok) {
+      console.error("[Cartify] ensureSession create failed:", createRes.status, await createRes.text());
+      return null;
+    }
+
     const created = await createRes.json();
     if (Array.isArray(created) && created.length > 0) {
       return created[0].id;
@@ -225,7 +241,7 @@ async function addSessionItem(
       if (inCart) updateBody.in_cart = true;
       if (tryonRequestId) updateBody.tryon_request_id = tryonRequestId;
 
-      await fetch(
+      const patchRes = await fetch(
         `${SUPABASE_URL}/rest/v1/session_items?id=eq.${existing[0].id}`,
         {
           method: "PATCH",
@@ -233,13 +249,16 @@ async function addSessionItem(
           body: JSON.stringify(updateBody),
         }
       );
+      if (!patchRes.ok) {
+        console.error("[Cartify] addSessionItem PATCH failed:", patchRes.status, await patchRes.text());
+      }
     } else {
       // Insert new item
       const domain = payload.product_url
         ? (() => { try { return new URL(payload.product_url).hostname.replace(/^www\./, ""); } catch { return null; } })()
         : null;
 
-      await fetch(`${SUPABASE_URL}/rest/v1/session_items`, {
+      const postRes = await fetch(`${SUPABASE_URL}/rest/v1/session_items`, {
         method: "POST",
         headers: { ...headers, Prefer: "return=minimal" },
         body: JSON.stringify({
@@ -255,6 +274,9 @@ async function addSessionItem(
           tryon_request_id: tryonRequestId || null,
         }),
       });
+      if (!postRes.ok) {
+        console.error("[Cartify] addSessionItem POST failed:", postRes.status, await postRes.text());
+      }
     }
   } catch (e) {
     console.error("[Cartify] addSessionItem error:", e);

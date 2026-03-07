@@ -1,61 +1,50 @@
 
 
-## Fix List: Login, Product Focus, Extension Polish
+## Plan: Fix Cart Silent Failures + Stale Auth State
 
-### 1. Fix login flow — the /login 404 issue
+### Root Cause
 
-The screenshot shows `/login` returning a 404. The OAuth redirect URL in `extension/src/lib/auth.ts` uses `chrome.identity.getRedirectURL()` which should work for the extension flow. However, the `webAppSync.ts` content script still sends `VTO_SESSION_FROM_WEB` — this suggests the OAuth flow is opening a browser tab to the website instead of using `chrome.identity`. 
+The auth logs confirm **"Refresh Token Not Found"** — the stored refresh token is permanently invalid (revoked or rotated by the backend). Two bugs stem from this:
 
-**Root cause:** The `chrome.identity.launchWebAuthFlow` redirect URL (`chrome.identity.getRedirectURL()`) must be registered in the backend's OAuth redirect allowlist. If it's not, the provider may fall back to a web redirect. Also, the `redirect_to` parameter in the auth URL needs to match the extension's redirect URL pattern exactly.
+**1. "Sign in" shown despite being logged in:**
+`getAuthState()` detects the expired access token, tries `refreshToken()`, it fails (invalid refresh token), returns `loggedIn: false`. This is actually *correct* — the session is dead. But the stale tokens remain in storage, so the extension never shows a clean login state. The user needs to re-authenticate but doesn't get a clear prompt.
 
-**Fix:** Ensure the auth URL includes the correct `redirect_to` for chrome.identity. The current code looks correct — the issue is likely on the backend OAuth config side. We need to verify the redirect URL is whitelisted. But from the code side, the flow should work. The `/login` 404 happens because the old OAuth config redirects to `/login`. We should add `/login` as a catch-all redirect to `/` in `App.tsx` so users never see a 404 there.
+**Fix:** When `refreshToken()` fails, clear all stale auth data from storage so the extension shows the login screen cleanly. This forces a proper re-login flow.
 
-**Files:** `src/App.tsx` — add a redirect from `/login` to `/`
+**2. Cart shows green checkmark but nothing saves:**
+The `CARTIFY_ADD_TO_CART` handler calls `addSessionItem()` but responds `{ok: true}` **immediately** without waiting for the result. The content script sees `ok: true` and plays the green animation, but `addSessionItem` silently fails because `getAuthHeaders()` returns null (dead session).
 
-### 2. Remove non-person categories from extension
+**Fix:** Make `addSessionItem` return a boolean. Propagate it to `sendResponse` so the content script only shows success when the item was actually saved.
 
-Remove Home, Pets, Vehicle, Garden from `CATEGORY_GROUPS` in `Popup.tsx`. Keep only "You". Remove the tab bar entirely since there's only one group.
+### Changes
 
-**File:** `extension/src/popup/Popup.tsx`
+**`extension/src/background/index.ts`:**
 
-### 3. Update "Try on anything" section — remove home/garden products
+1. **`refreshToken()`** — on failure (invalid refresh token), clear all stale auth data:
+   ```ts
+   if (!res.ok) {
+     // Refresh token is dead — clear stale auth to force re-login
+     await chrome.storage.local.remove(["cartify_auth_token", "cartify_refresh_token", "cartify_user"]);
+     return false;
+   }
+   ```
 
-Remove: Lamps, Chairs, Vases, Planters, Cushions from both `tryOnCategories` and `tryOnCategories2`. Keep only wearable/person items. The remaining person-focused items with white backgrounds: Dress, Sneakers, Watch, Sunglasses, Handbag, Ring, Jacket, Hat, Boots, Necklace, Blazer, Bracelet, Jeans, Heels.
+2. **`addSessionItem()`** — return `boolean` indicating success/failure instead of `void`
 
-Update the section subtitle to remove "home decor, garden" language.
+3. **`CARTIFY_ADD_TO_CART` handler** — await the result and respond accordingly:
+   ```ts
+   addSessionItem(msg.payload, "cart", true).then((ok) => {
+     sendResponse({ ok });
+   });
+   ```
 
-Update the FAQ answer about "What kind of products can I try on?" to remove home decor mention.
+4. **`CARTIFY_SAVE_PRODUCT` handler** — same fix
 
-**File:** `src/pages/LandingPage.tsx`
+### Files
 
-### 4. Fix content script login pill text
+| File | Change |
+|------|--------|
+| `extension/src/background/index.ts` | Fix `refreshToken` to clear stale creds on failure; make `addSessionItem` return boolean; fix cart/save handlers to propagate success/failure |
 
-Change "Log in to Cartify to try on" → "Log in" (shorter, cleaner).
-
-**File:** `extension/src/content/ui.ts`
-
-### 5. Add Settings screen to extension
-
-Add a third screen "settings" accessible from the header (gear icon next to Sign Out). Settings page includes:
-- **Display mode**: Radio/toggle between "Popup" and "Side Panel" — stores preference in `chrome.storage.local` as `cartify_display_mode`
-- Sign Out button moved here
-
-**File:** `extension/src/popup/Popup.tsx`
-
-### 6. Remaining VTO references
-
-`webAppSync.ts` still uses `VTO_SESSION_FROM_WEB` message type and `background/index.ts` listens for it. Rename to `CARTIFY_SESSION_FROM_WEB` for consistency.
-
-**Files:** `extension/src/content/webAppSync.ts`, `extension/src/background/index.ts`
-
-### Files summary
-
-| File | Changes |
-|------|---------|
-| `src/App.tsx` | Add `/login` redirect to `/` |
-| `src/pages/LandingPage.tsx` | Remove lamp/chair/vase/planter/cushion, update subtitle & FAQ |
-| `extension/src/popup/Popup.tsx` | Remove non-You categories, remove tab bar, add Settings screen with display mode toggle |
-| `extension/src/content/ui.ts` | Shorten login pill text to "Log in" |
-| `extension/src/content/webAppSync.ts` | Rename VTO_ message types to CARTIFY_ |
-| `extension/src/background/index.ts` | Rename VTO_ message types to CARTIFY_ |
+No DB or UI changes needed. After this fix, when the refresh token is dead, the extension will cleanly show the login screen, and the cart button will show an error instead of a false success.
 

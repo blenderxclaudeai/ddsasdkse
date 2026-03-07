@@ -44,12 +44,6 @@ interface PhotoRecord {
   signedUrl?: string;
 }
 
-interface PendingProduct {
-  product_url: string;
-  product_title: string;
-  product_image: string;
-  product_category?: string;
-}
 
 const CATEGORY_GROUPS = [
   {

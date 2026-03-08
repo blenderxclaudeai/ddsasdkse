@@ -987,16 +987,47 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         )}
       </div>
 
-      {/* ── Session total bar ── */}
-      {screen === "session" && sessionItems.length > 0 && sessionTotal > 0 && (
-        <div className="shrink-0 border-t bg-secondary/30 px-5 py-2.5">
-          <div className="flex items-center justify-between">
-            <p className="text-[12px] text-muted-foreground">
-              Total · {sessionItems.length} item{sessionItems.length !== 1 ? "s" : ""}
-            </p>
-            <p className="text-[14px] font-semibold text-foreground">
-              ~{currencySymbol}{sessionTotal.toFixed(2)}
-            </p>
+      {/* ── Session summary bar ── */}
+      {screen === "session" && sessionItems.length > 0 && (
+        <div className="shrink-0 border-t border-border bg-background px-5 py-3">
+          <div className="space-y-2">
+            {/* Stats row */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-[12px] text-muted-foreground">
+                  {sessionItems.length} item{sessionItems.length !== 1 ? "s" : ""}
+                </span>
+                {cartItems.length > 0 && (
+                  <span className="text-[12px] text-muted-foreground">
+                    {cartItems.length} in cart
+                  </span>
+                )}
+              </div>
+              {sessionTotal > 0 && (
+                <p className="text-[15px] font-semibold text-foreground tracking-tight">
+                  {currencySymbol}{sessionTotal.toFixed(2)}
+                </p>
+              )}
+            </div>
+
+            {/* Savings hint — show when cart has items */}
+            {cartItems.length > 0 && cartTotal > 0 && (
+              <div className="flex items-center justify-between rounded-lg bg-secondary/60 px-3 py-2">
+                <p className="text-[11px] text-muted-foreground">
+                  Cart total
+                </p>
+                <p className="text-[12px] font-semibold text-foreground">
+                  {currencySymbol}{cartTotal.toFixed(2)}
+                </p>
+              </div>
+            )}
+
+            {/* Savings from coupons */}
+            {activeCoupons.length > 0 && (
+              <p className="text-center text-[11px] font-medium text-muted-foreground">
+                {activeCoupons.length} deal{activeCoupons.length !== 1 ? "s" : ""} available — save more at checkout
+              </p>
+            )}
           </div>
         </div>
       )}

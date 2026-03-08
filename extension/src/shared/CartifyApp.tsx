@@ -682,21 +682,15 @@ export function CartifyApp({ mode }: CartifyAppProps) {
             )}
 
             {sessionLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex gap-3 animate-pulse">
-                    <div className="h-14 w-14 rounded-lg bg-secondary" />
-                    <div className="flex-1 space-y-2 py-1">
-                      <div className="h-3 w-3/4 rounded bg-secondary" />
-                      <div className="h-2.5 w-1/2 rounded bg-secondary" />
-                    </div>
-                  </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="aspect-square rounded-xl bg-secondary animate-pulse" />
                 ))}
               </div>
             ) : sessionItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center text-center py-10">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary">
-                  <span className="text-[20px] text-muted-foreground">🛍</span>
+                  <span className="text-[20px] text-muted-foreground">—</span>
                 </div>
                 <p className="mt-3 text-[13px] font-medium text-foreground">No activity yet</p>
                 <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-muted-foreground">
@@ -704,98 +698,70 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {/* Cart summary */}
-                {cartItems.length > 0 && (
-                  <div className="rounded-xl border border-border bg-secondary/30 p-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[12px] font-medium text-foreground">
-                        Cart · {cartItems.length} item{cartItems.length !== 1 ? "s" : ""}
+              <div className="grid grid-cols-2 gap-3">
+                {sessionItems.map((item) => (
+                  <div key={item.id} className="group relative">
+                    {/* Product image */}
+                    {item.product_image ? (
+                      <img
+                        src={item.product_image}
+                        alt={item.product_title || "Product"}
+                        className="aspect-square w-full rounded-xl object-cover bg-secondary"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-secondary">
+                        <span className="text-[24px] text-muted-foreground/40">—</span>
+                      </div>
+                    )}
+
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-foreground/0 opacity-0 transition-all duration-200 group-hover:bg-foreground/50 group-hover:opacity-100">
+                      <button
+                        onClick={() => handleTryOnSessionItem(item)}
+                        className="w-[80%] rounded-lg bg-background/95 py-2 text-[11px] font-medium text-foreground shadow-sm transition-opacity hover:opacity-90"
+                      >
+                        Try On
+                      </button>
+                      <button
+                        onClick={() => handleToggleCart(item)}
+                        className="w-[80%] rounded-lg bg-foreground/95 py-2 text-[11px] font-medium text-background shadow-sm transition-opacity hover:opacity-90"
+                      >
+                        {item.in_cart ? "Remove from Cart" : "Add to Cart"}
+                      </button>
+                      <button
+                        onClick={() => handleRemoveSessionItem(item)}
+                        className="mt-0.5 text-[10px] font-medium text-background/70 underline underline-offset-2 transition-opacity hover:text-background"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    {/* Status badge */}
+                    {item.in_cart && (
+                      <div className="absolute top-2 left-2">
+                        <span className="rounded-full bg-foreground px-2 py-0.5 text-[9px] font-medium text-background shadow-sm">
+                          In Cart
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Product info */}
+                    <div className="mt-1.5 px-0.5">
+                      <p className="truncate text-[11px] font-medium text-foreground">
+                        {item.product_title || "Product"}
                       </p>
-                      {cartTotal > 0 && (
-                        <p className="text-[13px] font-semibold text-foreground">
-                          ~{currencySymbol}{cartTotal.toFixed(2)}
-                        </p>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {item.product_price && (
+                          <span className="text-[11px] font-semibold text-foreground">{item.product_price}</span>
+                        )}
+                        {item.retailer_domain && (
+                          <span className="text-[10px] text-muted-foreground/50">{item.retailer_domain}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                )}
-
-                {/* Item list */}
-                <div className="space-y-2">
-                  {sessionItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-3 rounded-xl border border-border bg-background p-2.5 transition-colors hover:bg-secondary/30"
-                    >
-                      {item.product_image ? (
-                        <img
-                          src={item.product_image}
-                          alt={item.product_title || "Product"}
-                          className="h-14 w-14 rounded-lg object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-secondary text-[18px] text-muted-foreground">
-                          🏷
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="truncate text-[12px] font-medium text-foreground">
-                          {item.product_title || "Product"}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          {item.product_price && (
-                            <span className="text-[10px] text-muted-foreground">{item.product_price}</span>
-                          )}
-                          {item.retailer_domain && (
-                            <span className="text-[10px] text-muted-foreground/50">{item.retailer_domain}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 mt-1.5">
-                          {item.in_cart ? (
-                            <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[9px] font-medium text-foreground">
-                              In Cart
-                            </span>
-                          ) : null}
-                          {item.interaction_type === "tryon_requested" || item.interaction_type === "tryon_completed" ? (
-                            <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[9px] font-medium text-foreground">
-                              Try-on
-                            </span>
-                          ) : null}
-                          {item.interaction_type === "saved" ? (
-                            <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[9px] font-medium text-foreground">
-                              Saved
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <button
-                          onClick={() => handleToggleCart(item)}
-                          title={item.in_cart ? "Remove from cart" : "Add to cart"}
-                          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill={item.in_cart ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-                        </button>
-                        <button
-                          onClick={() => handleTryOnSessionItem(item)}
-                          title="Try on"
-                          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7l7.4 6.16a1 1 0 0 1-.74 1.84H4.34a1 1 0 0 1-.74-1.84L11 7V5.73A2 2 0 0 1 12 2z"/><path d="M2 20h20"/></svg>
-                        </button>
-                        <button
-                          onClick={() => handleRemoveSessionItem(item)}
-                          title="Remove"
-                          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                ))}
               </div>
             )}
           </div>

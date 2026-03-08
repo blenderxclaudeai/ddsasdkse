@@ -710,7 +710,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                         loading="lazy"
                       />
                     ) : (
-                      <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-secondary">
+                      <div className="flex aspect-[3/4] w-full items-center justify-center rounded-xl bg-secondary">
                         <span className="text-[24px] text-muted-foreground/40">—</span>
                       </div>
                     )}

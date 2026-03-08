@@ -737,14 +737,6 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                       </button>
                     </div>
 
-                    {/* Status badge */}
-                    {item.in_cart && (
-                      <div className="absolute top-2 left-2">
-                        <span className="rounded-full bg-foreground px-2 py-0.5 text-[9px] font-medium text-background shadow-sm">
-                          In Cart
-                        </span>
-                      </div>
-                    )}
 
                     {/* Product info */}
                     <div className="mt-1.5 px-0.5">

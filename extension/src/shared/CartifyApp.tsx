@@ -684,7 +684,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
             {sessionLoading ? (
               <div className="grid grid-cols-2 gap-3">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="aspect-square rounded-xl bg-secondary animate-pulse" />
+                  <div key={i} className="aspect-[3/4] rounded-xl bg-secondary animate-pulse" />
                 ))}
               </div>
             ) : sessionItems.length === 0 ? (
@@ -706,11 +706,11 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                       <img
                         src={item.product_image}
                         alt={item.product_title || "Product"}
-                        className="aspect-square w-full rounded-xl object-cover bg-secondary"
+                        className="aspect-[3/4] w-full rounded-xl object-cover bg-secondary"
                         loading="lazy"
                       />
                     ) : (
-                      <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-secondary">
+                      <div className="flex aspect-[3/4] w-full items-center justify-center rounded-xl bg-secondary">
                         <span className="text-[24px] text-muted-foreground/40">—</span>
                       </div>
                     )}
@@ -737,14 +737,6 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                       </button>
                     </div>
 
-                    {/* Status badge */}
-                    {item.in_cart && (
-                      <div className="absolute top-2 left-2">
-                        <span className="rounded-full bg-foreground px-2 py-0.5 text-[9px] font-medium text-background shadow-sm">
-                          In Cart
-                        </span>
-                      </div>
-                    )}
 
                     {/* Product info */}
                     <div className="mt-1.5 px-0.5">

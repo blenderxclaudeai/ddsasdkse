@@ -568,12 +568,18 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     return isNaN(num) ? sum : sum + num;
   }, 0);
 
-  // Detect currency symbol from first priced item
+  // Detect currency symbol/prefix from first priced item
   const currencySymbol = (() => {
     const priced = sessionItems.find((i) => i.product_price);
     if (!priced?.product_price) return "$";
-    const match = priced.product_price.match(/[^\d\s.,]/);
-    return match ? match[0] : "$";
+    // Match currency symbols or currency codes (kr, SEK, EUR, USD, etc.)
+    const symbolMatch = priced.product_price.match(/^[\$€£¥₹]/);
+    if (symbolMatch) return symbolMatch[0];
+    const codeMatch = priced.product_price.match(/\b(kr|sek|eur|usd|gbp|dkk|nok)\b/i);
+    if (codeMatch) return codeMatch[1].toUpperCase() + " ";
+    const trailingSymbol = priced.product_price.match(/[\$€£¥₹]/);
+    if (trailingSymbol) return trailingSymbol[0];
+    return "$";
   })();
 
   const getAffiliateUrl = (r: TryonResult) =>
@@ -617,9 +623,18 @@ export function CartifyApp({ mode }: CartifyAppProps) {
 
       {/* ── Fixed sub-header ── */}
       {screen === "session" ? (
-        <div className="shrink-0 px-5 pb-2 pt-1">
-          <h2 className="text-[16px] font-semibold tracking-tight text-foreground">Shopping Session</h2>
-          <p className="text-[11px] text-muted-foreground">Products you've interacted with today</p>
+        <div className="shrink-0 px-5 pb-2 pt-1 flex items-center justify-between">
+          <div>
+            <h2 className="text-[16px] font-semibold tracking-tight text-foreground">Shopping Session</h2>
+            <p className="text-[11px] text-muted-foreground">Products you've interacted with today</p>
+          </div>
+          <button
+            onClick={() => { setSessionLoading(true); setScreen("session"); }}
+            className="text-muted-foreground text-[14px] px-2 py-1 rounded-lg hover:bg-secondary hover:text-foreground transition-colors"
+            title="Refresh"
+          >
+            ↻
+          </button>
         </div>
       ) : screen === "profile" ? (
         <div className="shrink-0 px-5 pb-2">
@@ -667,7 +682,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                         <button
                           onClick={() => {
                             navigator.clipboard.writeText(c.code).catch(() => {});
-                            setShareToast("Code copied!");
+                            setShareToast(`${c.code} copied!`);
                             setTimeout(() => setShareToast(null), 2000);
                           }}
                           className="rounded-lg bg-foreground px-3 py-1.5 text-[10px] font-bold text-background tracking-wider transition-opacity hover:opacity-80"
@@ -700,7 +715,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 {sessionItems.map((item) => (
-                  <div key={item.id} className="group relative">
+                  <div key={item.id} className="group relative cursor-pointer" onClick={() => window.open(item.product_url, "_blank")}>
                     {/* Product image */}
                     {item.product_image ? (
                       <img
@@ -716,7 +731,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                     )}
 
                     {/* Hover overlay */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-foreground/0 opacity-0 transition-all duration-200 group-hover:bg-foreground/50 group-hover:opacity-100">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-foreground/0 opacity-0 transition-all duration-200 group-hover:bg-foreground/50 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleTryOnSessionItem(item)}
                         className="w-[80%] rounded-lg bg-background/95 py-2 text-[11px] font-medium text-foreground shadow-sm transition-opacity hover:opacity-90"
@@ -736,6 +751,13 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                         Remove
                       </button>
                     </div>
+
+                    {/* Cart indicator */}
+                    {item.in_cart && (
+                      <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-foreground flex items-center justify-center shadow-sm">
+                        <span className="text-[9px] text-background">✓</span>
+                      </div>
+                    )}
 
 
                     {/* Product info */}
@@ -857,6 +879,33 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                           className="aspect-[3/4] w-full rounded-xl object-cover"
                           loading="lazy"
                         />
+                        {/* Hover overlay */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-foreground/0 opacity-0 transition-all duration-200 group-hover:bg-foreground/50 group-hover:opacity-100">
+                          <a
+                            href={getAffiliateUrl(r)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-[80%] rounded-lg bg-background/95 py-2 text-center text-[11px] font-medium text-foreground shadow-sm transition-opacity hover:opacity-90 no-underline"
+                          >
+                            Add to Cart
+                          </a>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleDownload(r)}
+                              title="Download"
+                              className="flex items-center justify-center rounded-lg bg-background/95 px-3 py-2 text-foreground shadow-sm transition-opacity hover:opacity-90"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            </button>
+                            <button
+                              onClick={() => handleShare(r)}
+                              title="Share"
+                              className="flex items-center justify-center rounded-lg bg-background/95 px-3 py-2 text-foreground shadow-sm transition-opacity hover:opacity-90"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                            </button>
+                          </div>
+                        </div>
                         {(r.title || r.price) && (
                           <div className="mt-1.5 px-0.5">
                             {r.title && (
@@ -876,26 +925,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                             </div>
                           </div>
                         )}
-                        <div className="mt-1.5 flex gap-1.5">
-                          <a
-                            href={getAffiliateUrl(r)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex-1 flex items-center justify-center rounded-lg bg-foreground px-3 py-1.5 text-[11px] font-medium text-background transition-opacity hover:opacity-90 no-underline"
-                          >
-                            Add to Cart
-                          </a>
-                          <button
-                            onClick={() => handleDownload(r)}
-                            title="Download"
-                            className="flex items-center justify-center rounded-lg border border-border bg-background px-2 py-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                          </button>
-                          <button
-                            onClick={() => handleShare(r)}
-                            title="Share"
-                            className="flex items-center justify-center rounded-lg border border-border bg-background px-2 py-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                      </div>
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
                           </button>

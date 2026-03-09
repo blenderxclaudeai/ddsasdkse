@@ -220,14 +220,6 @@ function detectCategory(): string | undefined {
     [/\b(shoe|shoes|sneakers|boots|sandals|heels|loafers|footwear|skor|stövlar|sandaler|chaussures|bottes|Schuhe|Stiefel|zapatos|botas)\b/, "shoes"],
     [/\b(socks|stockings|strumpor|sockor|chaussettes|Socken|calcetines)\b/, "shoes"],
     [/\b(bag|handbag|purse|backpack|tote|clutch|väska|ryggsäck|sac|Tasche|Rucksack|bolso|mochila)\b/, "bag"],
-    [/\b(sofa|soffa|soffor|sitssoffa|soffgrupp|couch|armchair|fåtölj|fåtöljer|coffee table|soffbord|side table|sidobord|lamp|lampa|rug|matta|carpet|curtain|gardin|pillow|kudde|cushion|canapé|fauteuil|tapis|rideau|coussin|divano|poltrona|tappeto|Sofa|Couch|Sessel|Couchtisch|Teppich|Kissen|Vorhang|Lampe|sofá|sillón|alfombra|cortina|cojín|lámpara)\b/, "living_room"],
-    [/\b(bed|beds|mattress|bedding|nightstand|duvet|comforter|säng|sängar|madrass|sängbord|påslakan|täcke|bäddset|lit|matelas|couette|table de nuit|Bett|Matratze|Bettdecke|Nachttisch|cama|colchón|edredón|mesita de noche)\b/, "bedroom"],
-    [/\b(kitchen|cookware|dinnerware|mug|cup|plate|bowl|kök|köksredskap|mugg|kopp|tallrik|skål|cuisine|casserole|vaisselle|tasse|assiette|bol|Küche|Geschirr|Tasse|Teller|Schüssel|cocina|vajilla|taza|plato|cuenco)\b/, "kitchen"],
-    [/\b(bathroom|towel|shower|bath mat|badrum|handduk|dusch|badmatta|salle de bain|serviette|douche|Badezimmer|Handtuch|Dusche|baño|toalla|ducha)\b/, "bathroom"],
-    [/\b(desk|office chair|monitor stand|bookshelf|skrivbord|kontorsstol|bokhylla|bureau|chaise de bureau|étagère|Schreibtisch|Bürostuhl|Regal|escritorio|silla de oficina|estantería)\b/, "office"],
-    [/\b(dog collar|dog bed|dog toy|cat toy|cat bed|pet|hundleksak|hundbädd|kattleksak|kattbädd|husdjur)\b/, "pet"],
-    [/\b(car seat cover|car mat|steering wheel|car accessory|bilklädsel|bilmatta|ratt|biltillbehör)\b/, "car_interior"],
-    [/\b(patio|garden|outdoor furniture|planter|flower pot|trädgård|utomhus|utomhusmöbler|kruka|balkong|jardin|terrasse|Garten|Terrasse|jardín|patio)\b/, "garden"],
   ];
 
   for (const [regex, category] of patterns) {

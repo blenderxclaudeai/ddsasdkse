@@ -435,6 +435,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (msg.type === "CARTIFY_ADD_TO_CART") {
     addSessionItem(msg.payload, "cart", true).then((ok) => {
+      if (ok) updateCartBadge();
       sendResponse({ ok });
     });
     return true;

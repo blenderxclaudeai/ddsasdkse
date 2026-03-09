@@ -568,12 +568,18 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     return isNaN(num) ? sum : sum + num;
   }, 0);
 
-  // Detect currency symbol from first priced item
+  // Detect currency symbol/prefix from first priced item
   const currencySymbol = (() => {
     const priced = sessionItems.find((i) => i.product_price);
     if (!priced?.product_price) return "$";
-    const match = priced.product_price.match(/[^\d\s.,]/);
-    return match ? match[0] : "$";
+    // Match currency symbols or currency codes (kr, SEK, EUR, USD, etc.)
+    const symbolMatch = priced.product_price.match(/^[\$€£¥₹]/);
+    if (symbolMatch) return symbolMatch[0];
+    const codeMatch = priced.product_price.match(/\b(kr|sek|eur|usd|gbp|dkk|nok)\b/i);
+    if (codeMatch) return codeMatch[1].toUpperCase() + " ";
+    const trailingSymbol = priced.product_price.match(/[\$€£¥₹]/);
+    if (trailingSymbol) return trailingSymbol[0];
+    return "$";
   })();
 
   const getAffiliateUrl = (r: TryonResult) =>

@@ -517,6 +517,10 @@ async function handleTryOn(payload: any, background = false): Promise<any> {
       imageUrl: payload.product_image,
       title: payload.product_title,
       category: payload.product_category || undefined,
+      price: payload.product_price || undefined,
+      retailerDomain: payload.retailer_domain || (() => {
+        try { return new URL(payload.product_url).hostname.replace(/^www\./, ""); } catch { return undefined; }
+      })(),
     });
 
     let res = await fetch(`${SUPABASE_URL}/functions/v1/tryon-request`, {

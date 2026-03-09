@@ -22,8 +22,7 @@
     },
     {
       "matches": [
-        "https://ddsasdkse.lovable.app/*",
-        "https://*.lovable.app/*"
+        "https://ddsasdkse.lovable.app/*"
       ],
       "js": ["webAppSync.js"],
       "run_at": "document_idle"

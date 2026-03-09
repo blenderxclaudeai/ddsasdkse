@@ -299,6 +299,7 @@ function evaluatePage() {
   });
 
   let lastUrl = location.href;
+  let lastRescanTime = 0;
   new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
@@ -309,8 +310,12 @@ function evaluatePage() {
       }
       setTimeout(evaluatePage, 800);
     } else {
-      // Same URL but DOM changed — possibly infinite scroll
-      scheduleListingRescan();
+      // Throttle rescan to max once per second
+      const now = Date.now();
+      if (now - lastRescanTime > 1000) {
+        lastRescanTime = now;
+        scheduleListingRescan();
+      }
     }
   }).observe(document.body, { childList: true, subtree: true });
 })();

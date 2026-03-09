@@ -715,7 +715,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 {sessionItems.map((item) => (
-                  <div key={item.id} className="group relative">
+                  <div key={item.id} className="group relative cursor-pointer" onClick={() => window.open(item.product_url, "_blank")}>
                     {/* Product image */}
                     {item.product_image ? (
                       <img

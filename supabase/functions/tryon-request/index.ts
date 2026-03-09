@@ -288,78 +288,9 @@ serve(async (req) => {
     }
 
     // ===== STEP 2: Try-On Compositing =====
-    const step2PromptMode = roomCategories.has(cat) ? "room" :
-      wearableCategories.has(cat) ? "wearable" :
-      cat === "pet" ? "pet" : cat === "car_interior" ? "car" : cat === "garden" ? "garden" : "wearable(default)";
-    console.log(`Step 2: compositing. Category: "${effectiveCategory}", promptMode: "${step2PromptMode}", usedExtractedProduct: ${cleanProductImage !== productImageDataUrl}`);
+    console.log(`Step 2: compositing. Category: "${effectiveCategory}", usedExtractedProduct: ${cleanProductImage !== productImageDataUrl}`);
 
-    let promptText: string;
-
-    if (roomCategories.has(cat)) {
-      promptText = `You are a virtual staging tool for an e-commerce home furnishing app. Your job is to show how a product looks inside a customer's real space.
-
-Image 1: A photo of the customer's actual room/space. This is their real environment — preserve every detail: walls, floor, ceiling, existing furniture, lighting, colors, and layout.
-
-Image 2: A product listing photo from an online store. It may show the product on a plain background, in a styled showroom, or with other items around it. Extract ONLY the single product being sold.
-
-Task: Generate a new photo of the EXACT same room from Image 1, but with the product from Image 2 naturally placed inside it. The product must be:
-- Correctly scaled relative to the room and existing furniture
-- Placed in a logical, realistic position (e.g. a sofa against a wall, a lamp on a table, a rug on the floor)
-- Lit consistently with the room's existing lighting
-- Shown from the same camera angle/perspective as Image 1
-
-CRITICAL RULES:
-- Do NOT add any people, pets, or living beings to the image
-- Do NOT remove, move, or alter any existing items in the room
-- Do NOT change the room's wall color, flooring, or architecture
-- The room must look identical to Image 1, just with one new product added
-- If the product is large (sofa, table, bed), find an appropriate open space in the room${productLabel}`;
-
-    } else if (cat === "pet") {
-      promptText = `You are a virtual try-on tool for a pet products e-commerce app. Your job is to show how a product looks on a customer's real pet.
-
-Image 1: A photo of the customer's pet. This is their actual animal — preserve its exact appearance: breed, color, markings, size, expression, and pose.
-
-Image 2: A product listing photo from an online pet store. Extract ONLY the product being sold (collar, harness, outfit, toy, bed, etc.), ignoring any model animals shown.
-
-Task: Generate a new photo of the EXACT same pet from Image 1, but with the product from Image 2 naturally placed on, worn by, or next to the pet. The product must be correctly scaled and positioned for the pet's size and body type. Keep the same background and setting as Image 1.
-
-CRITICAL RULES:
-- Do NOT change the pet's breed, color, markings, or any physical features
-- Do NOT swap the pet for a different animal
-- The pet must look identical to Image 1, just with the product added${productLabel}`;
-
-    } else if (cat === "car_interior") {
-      promptText = `You are a virtual staging tool for a car accessories e-commerce app. Your job is to show how a product looks inside a customer's real vehicle.
-
-Image 1: A photo of the customer's car interior. Preserve every detail: dashboard, seats, steering wheel, color scheme, and layout.
-
-Image 2: A product listing photo from an online store. Extract ONLY the car accessory being sold (seat cover, phone mount, air freshener, floor mat, etc.).
-
-Task: Generate a new photo of the EXACT same car interior from Image 1, but with the product from Image 2 naturally placed/installed inside it. The product must be correctly scaled, positioned in a logical spot, and lit consistently with the car's interior lighting.
-
-CRITICAL RULES:
-- Do NOT change the car's interior color, model, or any existing features
-- Do NOT add any people to the image
-- The car interior must look identical to Image 1, just with the product added${productLabel}`;
-
-    } else if (cat === "garden") {
-      promptText = `You are a virtual staging tool for a garden/outdoor products e-commerce app. Your job is to show how a product looks in a customer's real outdoor space.
-
-Image 1: A photo of the customer's garden, patio, balcony, or outdoor area. Preserve every detail: plants, fencing, flooring, structures, and layout.
-
-Image 2: A product listing photo from an online store. Extract ONLY the outdoor/garden product being sold (furniture, planter, lighting, decor, etc.).
-
-Task: Generate a new photo of the EXACT same outdoor space from Image 1, but with the product from Image 2 naturally placed inside it. The product must be correctly scaled, placed in a logical position, and lit consistently with the outdoor lighting conditions.
-
-CRITICAL RULES:
-- Do NOT change the garden's existing plants, structures, or layout
-- Do NOT add any people to the image
-- The outdoor space must look identical to Image 1, just with the product added${productLabel}`;
-
-    } else {
-      // Wearable — simplified prompt since product image is now clean (no other person)
-      promptText = `You are a virtual fitting room. Your job is a simple image compositing task: place the product from Image 2 onto the person in Image 1.
+    const promptText = `You are a virtual fitting room. Your job is a simple image compositing task: place the product from Image 2 onto the person in Image 1.
 
 Image 1: The customer. Preserve their EXACT appearance: face, skin tone, body shape, hair, and every physical feature.
 
@@ -374,7 +305,6 @@ CRITICAL RULES:
 1. You MUST output an image. Never return text-only.
 2. Do NOT alter the customer's face, skin color, body shape, hair, or any physical feature.
 3. The output should look like the customer took a photo while wearing the product.${productLabel}`;
-    }
 
     const PER_ATTEMPT_TIMEOUT_MS = 55_000;
     resultImageUrl = null;

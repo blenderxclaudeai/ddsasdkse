@@ -161,33 +161,26 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     return () => chrome.storage.onChanged.removeListener(listener);
   }, []);
 
-  // Load try-on results
+  // Load try-on results when on showroom screen
   useEffect(() => {
     if (!storedUser || screen !== "showroom") return;
-    setResultsLoading(true);
-
-    chrome.storage.local.get("cartify_auth_token", async (result) => {
-      const token = result.cartify_auth_token;
-      if (!token) { setResultsLoading(false); return; }
-
-      try {
-        const res = await fetch(
-          `${SUPABASE_URL}/rest/v1/tryon_requests?user_id=eq.${storedUser.id}&order=created_at.desc`,
-          {
-            headers: {
-              apikey: SUPABASE_ANON_KEY,
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-        const data = await res.json();
-        setResults(Array.isArray(data) ? data : []);
-      } catch {
-        setResults([]);
-      }
-      setResultsLoading(false);
-    });
+    loadResults();
   }, [storedUser, screen]);
+
+  // Auto-refresh showroom when try-on results complete in background
+  useEffect(() => {
+    const listener = (
+      changes: Record<string, { oldValue?: any; newValue?: any }>,
+      area: string
+    ) => {
+      if (area !== "local") return;
+      if (changes.cartify_recent_tryons?.newValue) {
+        loadResults(false);
+      }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, [storedUser]);
 
   // Reusable session items loader
   const loadSessionItems = async (showLoading = true) => {

@@ -320,6 +320,86 @@ function evaluatePage() {
   }).observe(document.body, { childList: true, subtree: true });
 })();
 
+const RETAILER_CART_SELECTORS = [
+  "button[data-testid*='add-to-cart' i]",
+  "button[name*='add'][name*='cart' i]",
+  "button[id*='add'][id*='cart' i]",
+  "button[class*='add'][class*='cart' i]",
+  "button[aria-label*='add to cart' i]",
+  "button[aria-label*='add to bag' i]",
+  "button[aria-label*='add to basket' i]",
+  "form[action*='/cart' i] button[type='submit']",
+  "form[action*='/bag' i] button[type='submit']",
+  "input[type='submit']",
+  "button[type='submit']",
+  "button",
+  "a[role='button']",
+];
+
+const RETAILER_CART_TEXT_RE = /add to (cart|bag|basket)|lägg i varukorg|in den warenkorb|ajouter au panier|zum warenkorb|añadir al carrito/i;
+
+function isEligibleCartButton(el: HTMLElement): boolean {
+  if ((el as HTMLButtonElement).disabled) return false;
+  if (el.getAttribute("aria-disabled") === "true") return false;
+
+  const rect = el.getBoundingClientRect();
+  if (rect.width < 24 || rect.height < 24) return false;
+
+  const style = getComputedStyle(el);
+  if (style.visibility === "hidden" || style.display === "none") return false;
+
+  return true;
+}
+
+function looksLikeCartAction(el: HTMLElement): boolean {
+  const text = [el.textContent || "", el.getAttribute("aria-label") || "", el.getAttribute("title") || ""]
+    .join(" ")
+    .trim()
+    .toLowerCase();
+  return RETAILER_CART_TEXT_RE.test(text);
+}
+
+function findRetailerCartAction(): HTMLElement | null {
+  for (const selector of RETAILER_CART_SELECTORS) {
+    const elements = document.querySelectorAll<HTMLElement>(selector);
+    for (const el of elements) {
+      if (!isEligibleCartButton(el)) continue;
+      if (looksLikeCartAction(el)) return el;
+    }
+  }
+  return null;
+}
+
+function tryAddToRetailerCart(targetUrl?: string): { ok: boolean; error?: string } {
+  if (targetUrl) {
+    try {
+      const target = new URL(targetUrl);
+      if (target.hostname.replace(/^www\./, "") !== location.hostname.replace(/^www\./, "")) {
+        return { ok: false, error: "Opened page doesn't match retailer" };
+      }
+    } catch {
+      // Ignore malformed target URL and attempt on current page anyway.
+    }
+  }
+
+  const action = findRetailerCartAction();
+  if (!action) {
+    return { ok: false, error: "No add-to-cart action found on this page" };
+  }
+
+  action.click();
+  showToastNotification("Added to retailer cart!");
+  return { ok: true };
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== "CARTIFY_ADD_TO_RETAILER_CART") return;
+
+  const result = tryAddToRetailerCart(msg?.payload?.target_url);
+  sendResponse(result);
+  return true;
+});
+
 function doTryOn() {
   const product = extractProduct();
   if (!product.product_image) {

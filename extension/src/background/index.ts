@@ -287,6 +287,11 @@ async function ensureSession(): Promise<string | null> {
   }
 }
 
+async function touchSessionState(): Promise<void> {
+  await chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
+  updateCartBadge().catch(() => {});
+}
+
 async function addSessionItem(
   payload: any,
   interactionType: string,
@@ -332,6 +337,7 @@ async function addSessionItem(
         console.error("[Cartify] addSessionItem PATCH failed:", patchRes.status, await patchRes.text());
         return false;
       }
+      await touchSessionState();
       return true;
     } else {
       // Insert new item
@@ -359,12 +365,89 @@ async function addSessionItem(
         console.error("[Cartify] addSessionItem POST failed:", postRes.status, await postRes.text());
         return false;
       }
+      await touchSessionState();
+      return true;
     }
-    return true;
   } catch (e) {
     console.error("[Cartify] addSessionItem error:", e);
     return false;
   }
+}
+
+function getDomainFromUrl(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function sendMessageToTab(tabId: number, message: any): Promise<any> {
+  return new Promise((resolve) => {
+    chrome.tabs.sendMessage(tabId, message, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ ok: false, error: chrome.runtime.lastError.message || "Tab message failed" });
+        return;
+      }
+      resolve(response);
+    });
+  });
+}
+
+async function handleAddToRetailerCart(payload: any): Promise<any> {
+  const targetUrl = payload?.product_url;
+  if (!targetUrl) {
+    return { ok: false, error: "Missing product URL" };
+  }
+
+  const targetDomain = payload?.retailer_domain || getDomainFromUrl(targetUrl) || "";
+
+  const activeTab = await new Promise<{ id?: number; url?: string } | null>((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      resolve(tabs?.[0] || null);
+    });
+  });
+
+  if (activeTab?.id && activeTab.url) {
+    const activeDomain = getDomainFromUrl(activeTab.url);
+    const sameDomain = activeDomain && targetDomain && activeDomain === targetDomain;
+
+    if (sameDomain) {
+      const response = await sendMessageToTab(activeTab.id, {
+        type: "CARTIFY_ADD_TO_RETAILER_CART",
+        payload: { target_url: targetUrl },
+      });
+      if (response?.ok) {
+        return { ok: true, clickedCurrentPage: true };
+      }
+    }
+  }
+
+  const redirectUrl = `${SUPABASE_URL}/functions/v1/redirect?target=${encodeURIComponent(targetUrl)}&retailerDomain=${encodeURIComponent(targetDomain)}`;
+
+  const openedTab = await new Promise<{ id?: number } | null>((resolve) => {
+    chrome.tabs.create({ url: redirectUrl, active: true }, (tab) => {
+      if (chrome.runtime.lastError) {
+        resolve(null);
+        return;
+      }
+      resolve(tab || null);
+    });
+  });
+
+  if (!openedTab?.id) {
+    return { ok: false, error: "Could not open retailer product page" };
+  }
+
+  await chrome.storage.local.set({
+    cartify_pending_retailer_cart: {
+      tabId: openedTab.id,
+      targetUrl,
+      createdAt: Date.now(),
+    },
+  });
+
+  return { ok: true, openedProductTab: true };
 }
 
 // ── Message handler ──
@@ -438,6 +521,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if (ok) updateCartBadge();
       sendResponse({ ok });
     });
+    return true;
+  }
+
+  if (msg.type === "CARTIFY_ADD_TO_RETAILER_CART") {
+    handleAddToRetailerCart(msg.payload).then(sendResponse);
     return true;
   }
 
@@ -672,9 +760,36 @@ async function updateCartBadge() {
 
 // Update badge when session items change
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.cartify_auth_token || changes.cartify_user)) {
+  if (
+    area === "local" &&
+    (changes.cartify_auth_token || changes.cartify_user || changes.cartify_session_updated_at)
+  ) {
     updateCartBadge();
   }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status !== "complete") return;
+
+  chrome.storage.local.get("cartify_pending_retailer_cart").then(async (result) => {
+    const pending = result.cartify_pending_retailer_cart;
+    if (!pending || pending.tabId !== tabId) return;
+
+    if (Date.now() - (pending.createdAt || 0) > 120_000) {
+      await chrome.storage.local.remove("cartify_pending_retailer_cart");
+      return;
+    }
+
+    const response = await sendMessageToTab(tabId, {
+      type: "CARTIFY_ADD_TO_RETAILER_CART",
+      payload: { target_url: pending.targetUrl },
+    });
+
+    if (response?.ok) {
+      await chrome.storage.local.remove("cartify_pending_retailer_cart");
+      await chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
+    }
+  }).catch(() => {});
 });
 
 // ── Alarm handler ──

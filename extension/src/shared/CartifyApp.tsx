@@ -682,9 +682,6 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     return "$";
   })();
 
-  const getAffiliateUrl = (r: TryonResult) =>
-    `${SUPABASE_URL}/functions/v1/redirect?target=${encodeURIComponent(r.page_url)}&retailerDomain=${r.retailer_domain ?? ""}`;
-
   return (
     <div className={containerClass + " relative"}>
       {/* Share toast */}
@@ -988,7 +985,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                         {/* Hover overlay */}
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-foreground/0 opacity-0 transition-all duration-200 group-hover:bg-foreground/50 group-hover:opacity-100">
                           <button
-                            onClick={() => handleAddToRetailerCart(getAffiliateUrl(r), r.retailer_domain)}
+                            onClick={() => handleAddToRetailerCart(r.page_url, r.retailer_domain)}
                             className="w-[80%] rounded-lg bg-background/95 py-2 text-center text-[11px] font-medium text-foreground shadow-sm transition-opacity hover:opacity-90 no-underline"
                           >
                             Add to Cart

@@ -1207,10 +1207,10 @@ export function CartifyApp({ mode }: CartifyAppProps) {
           </div>
           {cartItems.length > 0 && (
             <button
-              onClick={handleAddAllToRetailerCart}
+              onClick={startVariantFlow}
               className="mt-1.5 w-full rounded-lg bg-foreground py-1.5 text-[10px] font-medium text-background transition-opacity hover:opacity-80"
             >
-              Add all to retailer carts
+              Add to cart
             </button>
           )}
         </div>

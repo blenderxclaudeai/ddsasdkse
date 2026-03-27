@@ -685,6 +685,44 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     return "$";
   })();
 
+  const handleAddAllToRetailerCart = useCallback(() => {
+    if (cartItems.length === 0) return;
+
+    // Group cart items by retailer domain
+    const groups: Record<string, SessionItem[]> = {};
+    cartItems.forEach((item) => {
+      const domain = item.retailer_domain || "unknown";
+      if (!groups[domain]) groups[domain] = [];
+      groups[domain].push(item);
+    });
+
+    const storeCount = Object.keys(groups).length;
+    setShareToast(`Adding to ${storeCount} store${storeCount !== 1 ? "s" : ""}…`);
+
+    const allItems = Object.values(groups).flat();
+    let idx = 0;
+
+    const sendNext = () => {
+      if (idx >= allItems.length) {
+        setShareToast(`Added ${allItems.length} item${allItems.length !== 1 ? "s" : ""} to retailer carts`);
+        setTimeout(() => setShareToast(null), 3000);
+        return;
+      }
+      const item = allItems[idx];
+      chrome.runtime.sendMessage(
+        {
+          type: "CARTIFY_ADD_TO_RETAILER_CART",
+          payload: { product_url: item.product_url, retailer_domain: item.retailer_domain || undefined },
+        },
+        () => {
+          idx++;
+          setTimeout(sendNext, 500);
+        }
+      );
+    };
+    sendNext();
+  }, [cartItems]);
+
   return (
     <div className={containerClass + " relative"}>
       {/* Share toast */}

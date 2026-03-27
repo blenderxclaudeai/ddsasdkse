@@ -237,17 +237,14 @@ function evaluatePage() {
     const domain = location.hostname.replace(/^www\./, "");
     chrome.runtime.sendMessage({ type: "CARTIFY_CHECK_COUPONS", domain }, () => {});
 
-    // Product page: primary experience (single "Try On" button + modal)
+    // Product page: detect product for side panel, no floating button
     if (productPage && !listingPage) {
       if (loggedIn) {
         removeLoginPill();
         removeAllCardButtons();
         storeDetectedProduct();
-        if (!document.getElementById("cartify-tryon-btn")) {
-          injectButton(doTryOn);
-        }
+        // No floating "Try On" button — side panel handles it
       } else {
-        document.getElementById("cartify-tryon-btn")?.remove();
         injectLoginPill();
       }
       return;

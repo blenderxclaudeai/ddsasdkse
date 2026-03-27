@@ -365,7 +365,43 @@ function findRetailerCartAction(): HTMLElement | null {
   return null;
 }
 
-function tryAddToRetailerCart(targetUrl?: string): { ok: boolean; error?: string } {
+function trySelectVariant(variant: { size?: string; color?: string }): void {
+  if (!variant) return;
+
+  const tryMatch = (value: string) => {
+    if (!value) return;
+    const lower = value.trim().toLowerCase();
+
+    // Try select dropdowns
+    const selects = document.querySelectorAll<HTMLSelectElement>("select");
+    for (const sel of selects) {
+      for (const opt of sel.options) {
+        if (opt.text.trim().toLowerCase().includes(lower) || opt.value.toLowerCase().includes(lower)) {
+          sel.value = opt.value;
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+          return;
+        }
+      }
+    }
+
+    // Try buttons / radio labels
+    const buttons = document.querySelectorAll<HTMLElement>("button, [role='radio'], [role='option'], label, a[data-value]");
+    for (const btn of buttons) {
+      const text = (btn.textContent || "").trim().toLowerCase();
+      const ariaLabel = (btn.getAttribute("aria-label") || "").toLowerCase();
+      const dataValue = (btn.getAttribute("data-value") || "").toLowerCase();
+      if (text === lower || ariaLabel.includes(lower) || dataValue === lower) {
+        btn.click();
+        return;
+      }
+    }
+  };
+
+  if (variant.size) tryMatch(variant.size);
+  if (variant.color) tryMatch(variant.color);
+}
+
+function tryAddToRetailerCart(targetUrl?: string, variant?: { size?: string; color?: string }): { ok: boolean; error?: string } {
   if (targetUrl) {
     try {
       const target = new URL(targetUrl);
@@ -375,6 +411,11 @@ function tryAddToRetailerCart(targetUrl?: string): { ok: boolean; error?: string
     } catch {
       // Ignore malformed target URL and attempt on current page anyway.
     }
+  }
+
+  // Attempt to select variant before clicking add to cart
+  if (variant) {
+    trySelectVariant(variant);
   }
 
   const action = findRetailerCartAction();

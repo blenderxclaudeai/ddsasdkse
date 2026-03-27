@@ -621,20 +621,31 @@ function extractColorsFromDom(colors: Set<string>): void {
 
   // Button/radio groups labeled "color"
   const colorContainers = document.querySelectorAll<HTMLElement>(
-    "[class*='color' i][class*='selector' i], [class*='color' i][class*='option' i], [class*='colour' i][class*='selector' i], [class*='colour' i][class*='option' i], [class*='color' i][class*='picker' i], [data-testid*='color' i], [data-testid*='colour' i], fieldset[class*='color' i], [role='radiogroup'][aria-label*='color' i]"
+    "[class*='color' i][class*='selector' i], [class*='color' i][class*='option' i], [class*='colour' i][class*='selector' i], [class*='colour' i][class*='option' i], [class*='color' i][class*='picker' i], [data-testid*='color' i], [data-testid*='colour' i], fieldset[class*='color' i], [role='radiogroup'][aria-label*='color' i], [class*='color' i], [class*='colour' i]"
   );
   for (const container of colorContainers) {
-    const btns = container.querySelectorAll<HTMLElement>("button, [role='radio'], label, a[data-value]");
+    const btns = container.querySelectorAll<HTMLElement>("button, [role='radio'], label, a[data-value], li, a");
     for (const btn of btns) {
       const text = (btn.textContent || "").trim();
       const ariaLabel = btn.getAttribute("aria-label")?.trim();
       const title = btn.getAttribute("title")?.trim();
-      const val = ariaLabel || title || text;
+      const dataValue = btn.getAttribute("data-value")?.trim();
+      const val = dataValue || ariaLabel || title || text;
       if (val && val.length < 40) {
         colors.add(val);
       }
     }
     if (colors.size > 0) return;
+  }
+
+  // Broad fallback: any elements with aria-label containing "color"
+  const colorButtons = document.querySelectorAll<HTMLElement>("[aria-label*='color' i] button, [aria-label*='colour' i] button, button[aria-label*='color' i], button[aria-label*='colour' i]");
+  for (const btn of colorButtons) {
+    const ariaLabel = btn.getAttribute("aria-label")?.trim();
+    const title = btn.getAttribute("title")?.trim();
+    const dataValue = btn.getAttribute("data-value")?.trim();
+    const val = dataValue || ariaLabel || title || (btn.textContent || "").trim();
+    if (val && val.length < 40) colors.add(val);
   }
 }
 

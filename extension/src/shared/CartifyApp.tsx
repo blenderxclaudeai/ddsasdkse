@@ -830,41 +830,42 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                       </div>
                     )}
 
-                    {/* Hover overlay */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-foreground/0 opacity-0 transition-all duration-200 group-hover:bg-foreground/50 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => handleTryOnSessionItem(item)}
-                        className="w-[80%] rounded-lg bg-background/95 py-2 text-[11px] font-medium text-foreground shadow-sm transition-opacity hover:opacity-90"
-                      >
-                        Try On
-                      </button>
-                      <button
-                        onClick={() => handleToggleCart(item)}
-                        className="w-[80%] rounded-lg bg-foreground/95 py-2 text-[11px] font-medium text-background shadow-sm transition-opacity hover:opacity-90"
-                      >
-                        {item.in_cart ? "Remove from Cart" : "Add to Cart"}
-                      </button>
-                      <button
-                        onClick={() => handleAddToRetailerCart(item.product_url, item.retailer_domain)}
-                        className="w-[80%] rounded-lg bg-background/95 py-2 text-[11px] font-medium text-foreground shadow-sm transition-opacity hover:opacity-90"
-                      >
-                        Retailer Cart
-                      </button>
-                      <button
-                        onClick={() => handleRemoveSessionItem(item)}
-                        className="mt-0.5 text-[10px] font-medium text-background/70 underline underline-offset-2 transition-opacity hover:text-background"
-                      >
-                        Remove
-                      </button>
-                    </div>
-
-                    {/* Cart indicator */}
-                    {item.in_cart && (
-                      <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-foreground flex items-center justify-center shadow-sm">
-                        <span className="text-[9px] text-background">✓</span>
+                    {/* Hover overlay — 3 icon buttons */}
+                    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-foreground/0 opacity-0 transition-all duration-200 group-hover:bg-foreground/40 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-3">
+                        {/* Try On (hanger) */}
+                        <button
+                          onClick={() => handleTryOnSessionItem(item)}
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-background/90 text-foreground shadow-md transition-transform hover:scale-110"
+                          title="Try On"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 2a3 3 0 0 0-3 3c0 1.5 1.5 3 3 3s3-1.5 3-3a3 3 0 0 0-3-3z"/>
+                            <path d="M2 20l4-4c1.5-1.5 3.5-2 5.5-2h1c2 0 4 .5 5.5 2l4 4"/>
+                          </svg>
+                        </button>
+                        {/* Remove / Toggle cart (trash or minus) */}
+                        <button
+                          onClick={() => item.in_cart ? handleToggleCart(item) : handleRemoveSessionItem(item)}
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-background/90 text-foreground shadow-md transition-transform hover:scale-110"
+                          title={item.in_cart ? "Remove from Cart" : "Remove"}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                          </svg>
+                        </button>
+                        {/* Expand (maximize) */}
+                        <button
+                          onClick={() => item.product_image && setLightboxImage(item.product_image)}
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-background/90 text-foreground shadow-md transition-transform hover:scale-110"
+                          title="Enlarge"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+                          </svg>
+                        </button>
                       </div>
-                    )}
-
+                    </div>
 
                     {/* Product info */}
                     <div className="mt-1.5 px-0.5">

@@ -1,4 +1,4 @@
-import { extractProduct } from "./productExtract";
+import { extractProduct, extractVariants } from "./productExtract";
 import { isListingPage, findCardContainers, extractFromCard, extractFallbackFromLink } from "./productGrid";
 import {
   injectButton,

@@ -562,8 +562,31 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     const currentCartItems = sessionItems.filter((i) => i.in_cart);
     if (currentCartItems.length === 0) return;
     setVariantSelections({});
+    setExtractedVariants({});
     setVariantFlowIndex(0);
     setVariantFlow(currentCartItems);
+    // Fetch variants for first item
+    fetchVariantsForItem(currentCartItems[0]);
+  };
+
+  const fetchVariantsForItem = (item: SessionItem) => {
+    if (extractedVariants[item.id]) return; // already fetched
+    setVariantsLoading(true);
+    chrome.runtime.sendMessage(
+      { type: "CARTIFY_EXTRACT_VARIANTS", payload: { product_url: item.product_url } },
+      (response) => {
+        setVariantsLoading(false);
+        if (response?.ok && response.variants) {
+          setExtractedVariants((prev) => ({
+            ...prev,
+            [item.id]: {
+              sizes: response.variants.sizes || [],
+              colors: response.variants.colors || [],
+            },
+          }));
+        }
+      }
+    );
   };
 
   const handleVariantNext = () => {

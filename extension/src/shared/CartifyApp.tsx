@@ -1376,19 +1376,30 @@ export function CartifyApp({ mode }: CartifyAppProps) {
               </div>
             </div>
             {/* Footer */}
-            <div className="shrink-0 flex gap-2 px-4 pb-4">
-              <button
-                onClick={handleVariantSkip}
-                className="flex-1 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-opacity hover:opacity-80"
-              >
-                Skip
-              </button>
-              <button
-                onClick={handleVariantNext}
-                className="flex-1 rounded-lg bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-80"
-              >
-                {variantFlowIndex < variantFlow.length - 1 ? "Next" : "Add to cart"}
-              </button>
+            <div className="shrink-0 px-4 pb-4">
+              {(() => {
+                const hasVariantOptions = hasSizes || hasColors;
+                const hasSelection = !!(sel.size || sel.color);
+                const canProceed = !hasVariantOptions || hasSelection;
+                return (
+                  <>
+                    {hasVariantOptions && !hasSelection && !variantsLoading && (
+                      <p className="text-[10px] text-muted-foreground mb-2 text-center">Select size and/or color to continue</p>
+                    )}
+                    <button
+                      onClick={handleVariantNext}
+                      disabled={!canProceed || variantsLoading}
+                      className={`w-full rounded-lg py-2.5 text-[12px] font-medium transition-opacity ${
+                        canProceed && !variantsLoading
+                          ? "bg-foreground text-background hover:opacity-80"
+                          : "bg-muted text-muted-foreground cursor-not-allowed"
+                      }`}
+                    >
+                      {variantFlowIndex < variantFlow.length - 1 ? "Next" : "Add to cart"}
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           </div>
         );

@@ -77,9 +77,10 @@ function scrapeImage(): string | null {
     if (imgWithSrcset.src && !imgWithSrcset.src.startsWith("data:")) return imgWithSrcset.src;
   }
 
-  // 6. Largest image fallback (filtered)
+  // 6. Largest image fallback (filtered) — including lazy-loaded
   let largest: HTMLImageElement | null = null;
   let largestArea = 0;
+  let largestSrc = "";
   document.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
     const w = img.naturalWidth || img.width;
     const h = img.naturalHeight || img.height;
@@ -87,12 +88,14 @@ function scrapeImage(): string | null {
     // Filter out logos/icons: too small or extreme aspect ratio
     if (w < 200 || h < 200) return;
     if (w / h > 3 || h / w > 3) return;
-    if (area > largestArea && img.src && !img.src.startsWith("data:")) {
+    const src = img.src || img.dataset.src || img.dataset.lazySrc || "";
+    if (area > largestArea && src && !src.startsWith("data:")) {
       largestArea = area;
       largest = img;
+      largestSrc = src;
     }
   });
-  return largest ? (largest as HTMLImageElement).src : null;
+  return largestSrc || null;
 }
 
 /** Extract the largest URL from a srcset attribute */

@@ -162,10 +162,10 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         setUser(null);
         setStoredUser(null);
       }
-      if (changes.cartify_active_coupons?.newValue) {
-        setActiveCoupons(changes.cartify_active_coupons.newValue);
-      } else if (changes.cartify_active_coupons && !changes.cartify_active_coupons.newValue) {
-        setActiveCoupons([]);
+      if (changes.cartify_coupons_by_domain?.newValue) {
+        setCouponsByDomain(changes.cartify_coupons_by_domain.newValue);
+      } else if (changes.cartify_coupons_by_domain && !changes.cartify_coupons_by_domain.newValue) {
+        setCouponsByDomain({});
       }
     };
     chrome.storage.onChanged.addListener(listener);

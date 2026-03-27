@@ -109,6 +109,9 @@ export function CartifyApp({ mode }: CartifyAppProps) {
   // Settings state
   const [displayMode, setDisplayMode] = useState<"popup" | "sidepanel">(mode);
 
+  // Lightbox state
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
 
   // Coupon state
   const [activeCoupons, setActiveCoupons] = useState<any[]>([]);

@@ -1252,6 +1252,82 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         </nav>
       </div>
 
+      {/* ── Variant Selection Flow ── */}
+      {variantFlow && variantFlow[variantFlowIndex] && (() => {
+        const currentItem = variantFlow[variantFlowIndex];
+        const sel = variantSelections[currentItem.id] || { size: "", color: "" };
+        return (
+          <div className="absolute inset-0 z-50 flex flex-col bg-background">
+            {/* Header */}
+            <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-2">
+              <p className="text-[12px] font-medium text-muted-foreground">
+                {variantFlowIndex + 1} of {variantFlow.length}
+              </p>
+              <button
+                onClick={() => setVariantFlow(null)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
+              <div className="flex gap-3 mb-4">
+                {currentItem.product_image ? (
+                  <img src={currentItem.product_image} alt="" className="h-24 w-20 rounded-lg object-cover bg-secondary shrink-0" />
+                ) : (
+                  <div className="h-24 w-20 rounded-lg bg-secondary shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-[12px] font-medium text-foreground line-clamp-2">{currentItem.product_title || "Product"}</p>
+                  {currentItem.product_price && <p className="text-[11px] font-semibold text-foreground mt-0.5">{currentItem.product_price}</p>}
+                  {currentItem.retailer_domain && <p className="text-[10px] text-muted-foreground mt-0.5">{currentItem.retailer_domain}</p>}
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Size</label>
+                  <input
+                    type="text"
+                    value={sel.size}
+                    onChange={(e) => setVariantSelections((prev) => ({ ...prev, [currentItem.id]: { ...sel, size: e.target.value } }))}
+                    placeholder="e.g. M, 42, 10.5"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Color / Variant</label>
+                  <input
+                    type="text"
+                    value={sel.color}
+                    onChange={(e) => setVariantSelections((prev) => ({ ...prev, [currentItem.id]: { ...sel, color: e.target.value } }))}
+                    placeholder="e.g. Black, Navy Blue"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground"
+                  />
+                </div>
+              </div>
+            </div>
+            {/* Footer */}
+            <div className="shrink-0 flex gap-2 px-4 pb-4">
+              <button
+                onClick={handleVariantSkip}
+                className="flex-1 rounded-lg border border-border py-2.5 text-[12px] font-medium text-foreground transition-opacity hover:opacity-80"
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleVariantNext}
+                className="flex-1 rounded-lg bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-80"
+              >
+                {variantFlowIndex < variantFlow.length - 1 ? "Next" : "Add to cart"}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Image Lightbox ── */}
       {lightboxImage && (
         <div

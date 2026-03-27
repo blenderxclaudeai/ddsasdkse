@@ -112,6 +112,10 @@ export function CartifyApp({ mode }: CartifyAppProps) {
   // Lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
+  // Variant selection flow state
+  const [variantFlow, setVariantFlow] = useState<SessionItem[] | null>(null);
+  const [variantFlowIndex, setVariantFlowIndex] = useState(0);
+  const [variantSelections, setVariantSelections] = useState<Record<string, { size: string; color: string }>>({});
 
   // Coupon state
   const [activeCoupons, setActiveCoupons] = useState<any[]>([]);

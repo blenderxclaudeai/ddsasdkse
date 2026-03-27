@@ -1284,6 +1284,9 @@ export function CartifyApp({ mode }: CartifyAppProps) {
       {variantFlow && variantFlow[variantFlowIndex] && (() => {
         const currentItem = variantFlow[variantFlowIndex];
         const sel = variantSelections[currentItem.id] || { size: "", color: "" };
+        const ev = extractedVariants[currentItem.id];
+        const hasSizes = ev && ev.sizes.length > 0;
+        const hasColors = ev && ev.colors.length > 0;
         return (
           <div className="absolute inset-0 z-50 flex flex-col bg-background">
             {/* Header */}
@@ -1314,24 +1317,65 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                   {currentItem.retailer_domain && <p className="text-[10px] text-muted-foreground mt-0.5">{currentItem.retailer_domain}</p>}
                 </div>
               </div>
+
+              {variantsLoading && (
+                <p className="text-[10px] text-muted-foreground mb-2 animate-pulse">Detecting available options…</p>
+              )}
+
               <div className="space-y-3">
+                {/* Size */}
                 <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Size</label>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Size</label>
+                  {hasSizes ? (
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {ev.sizes.map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setVariantSelections((prev) => ({ ...prev, [currentItem.id]: { ...sel, size: sel.size === s ? "" : s } }))}
+                          className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                            sel.size === s
+                              ? "border-foreground bg-foreground text-background"
+                              : "border-border text-foreground hover:bg-secondary"
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   <input
                     type="text"
                     value={sel.size}
                     onChange={(e) => setVariantSelections((prev) => ({ ...prev, [currentItem.id]: { ...sel, size: e.target.value } }))}
-                    placeholder="e.g. M, 42, 10.5"
+                    placeholder={hasSizes ? "Or type a size…" : "e.g. M, 42, 10.5"}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground"
                   />
                 </div>
+                {/* Color */}
                 <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Color / Variant</label>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Color / Variant</label>
+                  {hasColors ? (
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {ev.colors.map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => setVariantSelections((prev) => ({ ...prev, [currentItem.id]: { ...sel, color: sel.color === c ? "" : c } }))}
+                          className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                            sel.color === c
+                              ? "border-foreground bg-foreground text-background"
+                              : "border-border text-foreground hover:bg-secondary"
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   <input
                     type="text"
                     value={sel.color}
                     onChange={(e) => setVariantSelections((prev) => ({ ...prev, [currentItem.id]: { ...sel, color: e.target.value } }))}
-                    placeholder="e.g. Black, Navy Blue"
+                    placeholder={hasColors ? "Or type a color…" : "e.g. Black, Navy Blue"}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground"
                   />
                 </div>

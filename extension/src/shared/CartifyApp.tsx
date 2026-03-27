@@ -552,6 +552,44 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     );
   };
 
+  const handleAddAllToRetailerCart = () => {
+    const currentCartItems = sessionItems.filter((i) => i.in_cart);
+    if (currentCartItems.length === 0) return;
+
+    const groups: Record<string, SessionItem[]> = {};
+    currentCartItems.forEach((item) => {
+      const domain = item.retailer_domain || "unknown";
+      if (!groups[domain]) groups[domain] = [];
+      groups[domain].push(item);
+    });
+
+    const storeCount = Object.keys(groups).length;
+    setShareToast(`Adding to ${storeCount} store${storeCount !== 1 ? "s" : ""}…`);
+
+    const allItems = Object.values(groups).flat();
+    let idx = 0;
+
+    const sendNext = () => {
+      if (idx >= allItems.length) {
+        setShareToast(`Added ${allItems.length} item${allItems.length !== 1 ? "s" : ""} to retailer carts`);
+        setTimeout(() => setShareToast(null), 3000);
+        return;
+      }
+      const item = allItems[idx];
+      chrome.runtime.sendMessage(
+        {
+          type: "CARTIFY_ADD_TO_RETAILER_CART",
+          payload: { product_url: item.product_url, retailer_domain: item.retailer_domain || undefined },
+        },
+        () => {
+          idx++;
+          setTimeout(sendNext, 500);
+        }
+      );
+    };
+    sendNext();
+  };
+
   // ── Dimensions ──
   const containerClass = mode === "popup"
     ? "w-[380px] h-[560px] flex flex-col overflow-hidden"

@@ -611,39 +611,44 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if (!headers) { sendResponse({ ok: false }); return; }
       try {
         const domain = msg.domain;
+        let domainCoupons: any[] = [];
+
         const res = await fetchWithAutoRefresh(
           `${SUPABASE_URL}/rest/v1/retailer_coupons?domain=eq.${encodeURIComponent(domain)}&is_active=eq.true&select=code,description,discount_type,discount_value,min_purchase`,
           { headers }
         );
         const coupons = await res.json();
         if (Array.isArray(coupons) && coupons.length > 0) {
-          await chrome.storage.local.set({ cartify_active_coupons: coupons });
-          sendResponse({ ok: true, count: coupons.length });
-          return;
+          domainCoupons = coupons;
+        } else {
+          // No cached coupons — try scraping via edge function
+          try {
+            const scrapeRes = await fetch(`${SUPABASE_URL}/functions/v1/scrape-coupons`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: SUPABASE_ANON_KEY,
+              },
+              body: JSON.stringify({ domain }),
+            });
+            const scrapeText = await scrapeRes.text();
+            let scraped: any;
+            try { scraped = JSON.parse(scrapeText); } catch { scraped = {}; }
+            if (Array.isArray(scraped?.coupons) && scraped.coupons.length > 0) {
+              domainCoupons = scraped.coupons;
+            }
+          } catch { /* scraping failed, continue */ }
         }
 
-        // No cached coupons — try scraping via edge function
-        try {
-          const scrapeRes = await fetch(`${SUPABASE_URL}/functions/v1/scrape-coupons`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              apikey: SUPABASE_ANON_KEY,
-            },
-            body: JSON.stringify({ domain }),
-          });
-          const scrapeText = await scrapeRes.text();
-          let scraped: any;
-          try { scraped = JSON.parse(scrapeText); } catch { scraped = {}; }
-          if (Array.isArray(scraped?.coupons) && scraped.coupons.length > 0) {
-            await chrome.storage.local.set({ cartify_active_coupons: scraped.coupons });
-            sendResponse({ ok: true, count: scraped.coupons.length });
-            return;
-          }
-        } catch { /* scraping failed, continue */ }
-
-        await chrome.storage.local.remove("cartify_active_coupons");
-        sendResponse({ ok: true, count: 0 });
+        // Merge into per-domain coupon map (preserves other domains)
+        const stored = await chrome.storage.local.get("cartify_coupons_by_domain");
+        const couponMap: Record<string, any[]> = stored.cartify_coupons_by_domain || {};
+        if (domainCoupons.length > 0) {
+          couponMap[domain] = domainCoupons;
+        }
+        // Don't remove other domains — accumulate across session
+        await chrome.storage.local.set({ cartify_coupons_by_domain: couponMap });
+        sendResponse({ ok: true, count: domainCoupons.length });
       } catch {
         sendResponse({ ok: false });
       }
@@ -874,7 +879,18 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
       return;
     }
 
-    // Retry up to 3 times with 1.5s delay to wait for content script to load
+    // Inject content script programmatically to ensure it's ready
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content.js"],
+      });
+    } catch { /* already injected or restricted page */ }
+
+    // Initial delay to let the page and script settle
+    await new Promise((r) => setTimeout(r, 2000));
+
+    // Retry up to 3 times with 1.5s delay
     for (let attempt = 1; attempt <= 3; attempt++) {
       const response = await sendMessageToTab(tabId, {
         type: "CARTIFY_ADD_TO_RETAILER_CART",
@@ -897,9 +913,13 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
         await new Promise((r) => setTimeout(r, 1500));
       }
     }
-    // All retries failed — clean up
+    // All retries failed — clean up and close tab
     delete pendingCarts[String(tabId)];
     await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
+    // Close tab even on failure
+    setTimeout(() => {
+      try { chrome.tabs.remove(tabId); } catch {}
+    }, 1000);
   }).catch(() => {});
 });
 

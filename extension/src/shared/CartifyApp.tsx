@@ -120,26 +120,28 @@ export function CartifyApp({ mode }: CartifyAppProps) {
   const [variantsLoading, setVariantsLoading] = useState(false);
 
   // Coupon state
-  const [activeCoupons, setActiveCoupons] = useState<any[]>([]);
+  const [couponsByDomain, setCouponsByDomain] = useState<Record<string, any[]>>({});
   const [couponsExpanded, setCouponsExpanded] = useState(false);
+
+  // Flatten all coupons across domains
+  const activeCoupons = Object.values(couponsByDomain).flat();
 
   // Initialize auth + pending product
   useEffect(() => {
     chrome.storage.local.get(
-      ["cartify_auth_token", "cartify_user", "cartify_display_mode", "cartify_active_coupons", "cartify_auth_pending"],
+      ["cartify_auth_token", "cartify_user", "cartify_display_mode", "cartify_coupons_by_domain", "cartify_auth_pending"],
       (result) => {
         if (result.cartify_auth_token && result.cartify_user) {
           setStoredUser(result.cartify_user);
           setUser({ id: result.cartify_user.id });
         } else if (result.cartify_auth_pending) {
-          // Auth is in progress (tab open) — show loading state
           setAuthLoading(true);
         }
         if (result.cartify_display_mode) {
           setDisplayMode(result.cartify_display_mode);
         }
-        if (result.cartify_active_coupons) {
-          setActiveCoupons(result.cartify_active_coupons);
+        if (result.cartify_coupons_by_domain) {
+          setCouponsByDomain(result.cartify_coupons_by_domain);
         }
         setLoading(false);
       }
@@ -160,10 +162,10 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         setUser(null);
         setStoredUser(null);
       }
-      if (changes.cartify_active_coupons?.newValue) {
-        setActiveCoupons(changes.cartify_active_coupons.newValue);
-      } else if (changes.cartify_active_coupons && !changes.cartify_active_coupons.newValue) {
-        setActiveCoupons([]);
+      if (changes.cartify_coupons_by_domain?.newValue) {
+        setCouponsByDomain(changes.cartify_coupons_by_domain.newValue);
+      } else if (changes.cartify_coupons_by_domain && !changes.cartify_coupons_by_domain.newValue) {
+        setCouponsByDomain({});
       }
     };
     chrome.storage.onChanged.addListener(listener);
@@ -857,44 +859,94 @@ export function CartifyApp({ mode }: CartifyAppProps) {
           /* ── SESSION CONTENT ── */
           <div className="py-2">
             {/* Coupon banner */}
-            {activeCoupons.length > 0 && (
-              <div className="mb-3 rounded-xl border border-border bg-secondary/40 p-3">
-                <button
-                  onClick={() => setCouponsExpanded(!couponsExpanded)}
-                  className="flex w-full items-center justify-between text-left"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[14px]">🏷</span>
-                    <p className="text-[12px] font-medium text-foreground">
-                      {activeCoupons.length} deal{activeCoupons.length !== 1 ? "s" : ""} available
-                    </p>
-                  </div>
-                  <span className="text-[11px] text-muted-foreground">{couponsExpanded ? "▲" : "▼"}</span>
-                </button>
-                {couponsExpanded && (
-                  <div className="mt-2 space-y-2">
-                    {activeCoupons.map((c: any, idx: number) => (
-                      <div key={idx} className="flex items-center justify-between rounded-lg bg-background p-2.5 border border-border">
-                        <div>
-                          <p className="text-[11px] font-medium text-foreground">{c.description || `${c.discount_value || ""} off`}</p>
-                          {c.min_purchase && <p className="text-[9px] text-muted-foreground">Min. {c.min_purchase}</p>}
+            {activeCoupons.length > 0 && (() => {
+              // Calculate potential savings
+              const domainEntries = Object.entries(couponsByDomain).filter(([, coupons]) => coupons.length > 0);
+              const cartByDomain: Record<string, number> = {};
+              cartItems.forEach((item) => {
+                const domain = item.retailer_domain || "unknown";
+                const price = parsePriceValue(item.product_price);
+                if (price) cartByDomain[domain] = (cartByDomain[domain] || 0) + price;
+              });
+
+              let totalSavings = 0;
+              let freeShippingCount = 0;
+              for (const [domain, coupons] of domainEntries) {
+                const subtotal = cartByDomain[domain] || 0;
+                let bestDiscount = 0;
+                for (const c of coupons) {
+                  const isFreeShipping = /free.?ship|gratis.?frakt|livraison.?gratuite/i.test(c.description || "");
+                  if (isFreeShipping) { freeShippingCount++; continue; }
+                  const val = parseFloat(c.discount_value || "0");
+                  if (!val) continue;
+                  if (c.discount_type === "percentage") {
+                    bestDiscount = Math.max(bestDiscount, subtotal * val / 100);
+                  } else {
+                    bestDiscount = Math.max(bestDiscount, val);
+                  }
+                }
+                totalSavings += bestDiscount;
+              }
+
+              return (
+                <div className="mb-3 rounded-xl border border-border bg-secondary/40 p-3">
+                  <button
+                    onClick={() => setCouponsExpanded(!couponsExpanded)}
+                    className="flex w-full items-center justify-between text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[14px]">🏷</span>
+                      <p className="text-[12px] font-medium text-foreground">
+                        {activeCoupons.length} deal{activeCoupons.length !== 1 ? "s" : ""} available
+                      </p>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground">{couponsExpanded ? "▲" : "▼"}</span>
+                  </button>
+                  {/* Potential savings summary */}
+                  {(totalSavings > 0 || freeShippingCount > 0) && (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <p className="text-[10px] text-green-600 font-medium">
+                        💰 Potential savings: {totalSavings > 0 ? `${currencySymbol}${totalSavings.toFixed(2)}` : ""}
+                        {totalSavings > 0 && freeShippingCount > 0 ? " + " : ""}
+                        {freeShippingCount > 0 ? `${freeShippingCount} free shipping` : ""}
+                      </p>
+                    </div>
+                  )}
+                  {couponsExpanded && (
+                    <div className="mt-2 space-y-3">
+                      {domainEntries.map(([domain, coupons]) => (
+                        <div key={domain}>
+                          <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{domain}</p>
+                          <div className="space-y-1.5">
+                            {coupons.map((c: any, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between rounded-lg bg-background p-2.5 border border-border">
+                                <div>
+                                  <p className="text-[11px] font-medium text-foreground">{c.description || `${c.discount_value || ""} off`}</p>
+                                  {c.min_purchase && <p className="text-[9px] text-muted-foreground">Min. {c.min_purchase}</p>}
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(c.code).catch(() => {});
+                                    setShareToast(`${c.code} copied!`);
+                                    setTimeout(() => setShareToast(null), 2000);
+                                  }}
+                                  className="rounded-lg bg-foreground px-3 py-1.5 text-[10px] font-bold text-background tracking-wider transition-opacity hover:opacity-80"
+                                >
+                                  {c.code}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(c.code).catch(() => {});
-                            setShareToast(`${c.code} copied!`);
-                            setTimeout(() => setShareToast(null), 2000);
-                          }}
-                          className="rounded-lg bg-foreground px-3 py-1.5 text-[10px] font-bold text-background tracking-wider transition-opacity hover:opacity-80"
-                        >
-                          {c.code}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                      ))}
+                      <p className="text-[9px] text-muted-foreground italic text-center">
+                        Best discount auto-selected per store. Free shipping often combines with discount codes.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {sessionLoading ? (
               <div className="grid grid-cols-2 gap-3">
@@ -1321,7 +1373,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                 <div>
                   <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Size</label>
                   {hasSizes ? (
-                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                    <div className="flex flex-wrap gap-1.5">
                       {ev.sizes.map((s) => (
                         <button
                           key={s}
@@ -1336,20 +1388,15 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                         </button>
                       ))}
                     </div>
+                  ) : !variantsLoading ? (
+                    <p className="text-[10px] text-muted-foreground/60 italic">No size options detected</p>
                   ) : null}
-                  <input
-                    type="text"
-                    value={sel.size}
-                    onChange={(e) => setVariantSelections((prev) => ({ ...prev, [currentItem.id]: { ...sel, size: e.target.value } }))}
-                    placeholder={hasSizes ? "Or type a size…" : "e.g. M, 42, 10.5"}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground"
-                  />
                 </div>
                 {/* Color */}
                 <div>
                   <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Color / Variant</label>
                   {hasColors ? (
-                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                    <div className="flex flex-wrap gap-1.5">
                       {ev.colors.map((c) => (
                         <button
                           key={c}
@@ -1364,14 +1411,9 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                         </button>
                       ))}
                     </div>
+                  ) : !variantsLoading ? (
+                    <p className="text-[10px] text-muted-foreground/60 italic">No color options detected</p>
                   ) : null}
-                  <input
-                    type="text"
-                    value={sel.color}
-                    onChange={(e) => setVariantSelections((prev) => ({ ...prev, [currentItem.id]: { ...sel, color: e.target.value } }))}
-                    placeholder={hasColors ? "Or type a color…" : "e.g. Black, Navy Blue"}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-foreground"
-                  />
                 </div>
               </div>
             </div>

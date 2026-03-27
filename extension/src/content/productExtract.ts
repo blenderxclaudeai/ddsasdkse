@@ -579,17 +579,28 @@ function extractSizesFromDom(sizes: Set<string>): void {
 
   // Button/radio groups labeled "size"
   const sizeContainers = document.querySelectorAll<HTMLElement>(
-    "[class*='size' i][class*='selector' i], [class*='size' i][class*='option' i], [class*='size' i][class*='picker' i], [data-testid*='size' i], fieldset[class*='size' i], [role='radiogroup'][aria-label*='size' i]"
+    "[class*='size' i][class*='selector' i], [class*='size' i][class*='option' i], [class*='size' i][class*='picker' i], [data-testid*='size' i], fieldset[class*='size' i], [role='radiogroup'][aria-label*='size' i], [class*='size' i]"
   );
   for (const container of sizeContainers) {
-    const btns = container.querySelectorAll<HTMLElement>("button, [role='radio'], label, a[data-value]");
+    const btns = container.querySelectorAll<HTMLElement>("button, [role='radio'], label, a[data-value], li, a");
     for (const btn of btns) {
       const text = (btn.textContent || "").trim();
-      if (text && text.length < 20 && !/size guide|storleksguide/i.test(text)) {
-        sizes.add(text);
+      const dataValue = btn.getAttribute("data-value")?.trim();
+      const val = dataValue || text;
+      if (val && val.length < 20 && !/size guide|storleksguide|storlek|størrelse/i.test(val)) {
+        sizes.add(val);
       }
     }
     if (sizes.size > 0) return;
+  }
+
+  // Broad fallback: any buttons/links with aria-label containing "size"
+  const sizeButtons = document.querySelectorAll<HTMLElement>("[aria-label*='size' i] button, [aria-label*='size' i] a, button[aria-label*='size' i]");
+  for (const btn of sizeButtons) {
+    const text = (btn.textContent || btn.getAttribute("aria-label") || "").trim();
+    const dataValue = btn.getAttribute("data-value")?.trim();
+    const val = dataValue || text;
+    if (val && val.length < 20) sizes.add(val);
   }
 }
 

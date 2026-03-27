@@ -603,7 +603,9 @@ export function CartifyApp({ mode }: CartifyAppProps) {
   const handleVariantSkip = () => {
     if (!variantFlow) return;
     if (variantFlowIndex < variantFlow.length - 1) {
-      setVariantFlowIndex(variantFlowIndex + 1);
+      const nextIdx = variantFlowIndex + 1;
+      setVariantFlowIndex(nextIdx);
+      fetchVariantsForItem(variantFlow[nextIdx]);
     } else {
       executeAddAllToRetailerCart();
     }

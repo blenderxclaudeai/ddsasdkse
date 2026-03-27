@@ -780,15 +780,25 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
       return;
     }
 
-    const response = await sendMessageToTab(tabId, {
-      type: "CARTIFY_ADD_TO_RETAILER_CART",
-      payload: { target_url: pending.targetUrl },
-    });
+    // Retry up to 3 times with 1.5s delay to wait for content script to load
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const response = await sendMessageToTab(tabId, {
+        type: "CARTIFY_ADD_TO_RETAILER_CART",
+        payload: { target_url: pending.targetUrl, variant: pending.variant },
+      });
 
-    if (response?.ok) {
-      await chrome.storage.local.remove("cartify_pending_retailer_cart");
-      await chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
+      if (response?.ok) {
+        await chrome.storage.local.remove("cartify_pending_retailer_cart");
+        await chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
+        return;
+      }
+
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
     }
+    // All retries failed — clean up
+    await chrome.storage.local.remove("cartify_pending_retailer_cart");
   }).catch(() => {});
 });
 

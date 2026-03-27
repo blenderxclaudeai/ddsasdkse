@@ -1109,95 +1109,90 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         )}
       </div>
 
-      {/* ── Session summary bar ── */}
+      {/* ── Session summary bar (compact) ── */}
       {screen === "session" && sessionItems.length > 0 && (
-        <div className="shrink-0 border-t border-border bg-background px-5 py-3">
-          <div className="space-y-2">
-            {/* Stats row */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-[12px] text-muted-foreground">
-                  {sessionItems.length} item{sessionItems.length !== 1 ? "s" : ""}
-                </span>
-                {cartItems.length > 0 && (
-                  <span className="text-[12px] text-muted-foreground">
-                    {cartItems.length} in cart
-                  </span>
-                )}
-              </div>
-              {sessionTotal > 0 && (
-                <p className="text-[15px] font-semibold text-foreground tracking-tight">
-                  {currencySymbol}{sessionTotal.toFixed(2)}
-                </p>
-              )}
-            </div>
-
-            {/* Savings hint — show when cart has items */}
-            {cartItems.length > 0 && cartTotal > 0 && (
-              <div className="flex items-center justify-between rounded-lg bg-secondary/60 px-3 py-2">
-                <p className="text-[11px] text-muted-foreground">
-                  Cart total
-                </p>
-                <p className="text-[12px] font-semibold text-foreground">
-                  {currencySymbol}{cartTotal.toFixed(2)}
-                </p>
-              </div>
-            )}
-
-            {itemsMissingPrice > 0 && (
-              <p className="text-center text-[10px] text-muted-foreground">
-                {itemsMissingPrice} item{itemsMissingPrice !== 1 ? "s" : ""} missing detectable price
-              </p>
-            )}
-
-            {/* Savings from coupons */}
-            {activeCoupons.length > 0 && (
-              <p className="text-center text-[11px] font-medium text-muted-foreground">
-                {activeCoupons.length} deal{activeCoupons.length !== 1 ? "s" : ""} available — save more at checkout
-              </p>
-            )}
+        <div className="shrink-0 border-t border-border bg-background px-4 py-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">
+              {sessionItems.length} item{sessionItems.length !== 1 ? "s" : ""}
+              {cartItems.length > 0 && ` · ${cartItems.length} in cart`}
+            </span>
+            {cartTotal > 0 ? (
+              <span className="text-[11px] font-semibold text-foreground">
+                {currencySymbol}{cartTotal.toFixed(2)}
+              </span>
+            ) : sessionTotal > 0 ? (
+              <span className="text-[11px] font-semibold text-foreground">
+                {currencySymbol}{sessionTotal.toFixed(2)}
+              </span>
+            ) : null}
           </div>
+          {cartItems.length > 0 && (
+            <button
+              onClick={handleAddAllToRetailerCart}
+              className="mt-1.5 w-full rounded-lg bg-foreground py-1.5 text-[10px] font-medium text-background transition-opacity hover:opacity-80"
+            >
+              Add all to retailer carts
+            </button>
+          )}
         </div>
       )}
 
-      {/* ── Fixed bottom nav ── */}
-      <div className="shrink-0 border-t">
-        <nav className="flex items-center justify-around px-2 py-2.5">
+      {/* ── Fixed bottom nav (icons only) ── */}
+      <div className="shrink-0 border-t border-border">
+        <nav className="flex items-center justify-around px-2 py-2">
+          {/* Session — clock icon */}
           <button
             onClick={() => setScreen("session")}
-            className={`text-[12px] font-medium tracking-tight transition-colors ${
-              screen === "session"
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            className={`p-2 transition-colors ${screen === "session" ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            title="Session"
           >
-            Session
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
           </button>
+          {/* Showroom — grid icon */}
           <button
             onClick={() => setScreen("showroom")}
-            className={`text-[12px] font-medium tracking-tight transition-colors ${
-              screen === "showroom"
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            className={`p-2 transition-colors ${screen === "showroom" ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            title="Showroom"
           >
-            Showroom
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+            </svg>
           </button>
+          {/* Profile — user icon */}
           <button
             onClick={() => setScreen("profile")}
-            className={`text-[12px] font-medium tracking-tight transition-colors ${
-              screen === "profile"
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            className={`p-2 transition-colors ${screen === "profile" ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            title="Profile"
           >
-            Profile
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
           </button>
         </nav>
-        <p className="text-[9px] text-muted-foreground/50 text-center pb-2">
-          We may earn affiliate commission from purchases.
-        </p>
       </div>
+
+      {/* ── Image Lightbox ── */}
+      {lightboxImage && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-foreground/80 backdrop-blur-sm"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div className="relative max-h-[90%] max-w-[90%]" onClick={(e) => e.stopPropagation()}>
+            <img src={lightboxImage} alt="Product" className="max-h-[80vh] rounded-xl object-contain shadow-2xl" />
+            <button
+              onClick={() => setLightboxImage(null)}
+              className="absolute -top-3 -right-3 flex h-7 w-7 items-center justify-center rounded-full bg-background text-foreground shadow-md transition-transform hover:scale-110"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

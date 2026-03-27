@@ -54,9 +54,9 @@ function scrapeImage(): string | null {
   // 4. <picture> / <source srcset> parsing
   const pictures = document.querySelectorAll("picture");
   for (const pic of pictures) {
-    // Check if this picture is inside a product area
-    const parent = pic.closest("[class*='product'], [class*='gallery'], [id*='product'], main");
-    if (!parent && pictures.length > 3) continue; // skip non-product pictures if many on page
+    // Check if this picture is inside a product area — relaxed threshold
+    const parent = pic.closest("[class*='product'], [class*='gallery'], [id*='product'], main, article, [class*='detail'], [class*='hero']");
+    if (!parent && pictures.length > 5) continue; // skip non-product pictures only if many on page
     const sources = pic.querySelectorAll<HTMLSourceElement>("source[srcset]");
     for (const source of sources) {
       const srcset = source.getAttribute("srcset");

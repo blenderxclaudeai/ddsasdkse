@@ -530,6 +530,33 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === "CARTIFY_EXTRACT_VARIANTS") {
+    // Extract variants from a product page by opening it in a tab and querying the content script
+    const targetUrl = msg.payload?.product_url;
+    if (!targetUrl) {
+      sendResponse({ ok: false, error: "No URL" });
+      return true;
+    }
+    // Try to find an existing tab with this URL's domain
+    const targetDomain = getDomainFromUrl(targetUrl);
+    (async () => {
+      try {
+        const tabs = await chrome.tabs.query({});
+        const matchingTab = tabs.find((t) => t.url && getDomainFromUrl(t.url) === targetDomain);
+        if (matchingTab?.id) {
+          const response = await sendMessageToTab(matchingTab.id, { type: "CARTIFY_EXTRACT_VARIANTS" });
+          sendResponse(response || { ok: false });
+        } else {
+          // No matching tab — can't extract without opening a tab
+          sendResponse({ ok: false, error: "No open tab for this retailer" });
+        }
+      } catch {
+        sendResponse({ ok: false });
+      }
+    })();
+    return true;
+  }
+
   if (msg.type === "CARTIFY_SAVE_PRODUCT") {
     addSessionItem(msg.payload, "saved").then((ok) => {
       sendResponse({ ok });

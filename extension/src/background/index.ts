@@ -863,12 +863,14 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status !== "complete") return;
 
-  chrome.storage.local.get("cartify_pending_retailer_cart").then(async (result) => {
-    const pending = result.cartify_pending_retailer_cart;
-    if (!pending || pending.tabId !== tabId) return;
+  chrome.storage.local.get("cartify_pending_retailer_carts").then(async (result) => {
+    const pendingCarts: Record<string, any> = result.cartify_pending_retailer_carts || {};
+    const pending = pendingCarts[String(tabId)];
+    if (!pending) return;
 
     if (Date.now() - (pending.createdAt || 0) > 120_000) {
-      await chrome.storage.local.remove("cartify_pending_retailer_cart");
+      delete pendingCarts[String(tabId)];
+      await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
       return;
     }
 
@@ -880,8 +882,14 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
       });
 
       if (response?.ok) {
-        await chrome.storage.local.remove("cartify_pending_retailer_cart");
+        delete pendingCarts[String(tabId)];
+        await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
         await chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
+
+        // Wait 2 seconds then close the tab
+        setTimeout(() => {
+          try { chrome.tabs.remove(tabId); } catch {}
+        }, 2000);
         return;
       }
 
@@ -890,7 +898,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
       }
     }
     // All retries failed — clean up
-    await chrome.storage.local.remove("cartify_pending_retailer_cart");
+    delete pendingCarts[String(tabId)];
+    await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
   }).catch(() => {});
 });
 

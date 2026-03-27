@@ -579,12 +579,26 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           setTimeout(() => { chrome.tabs.onUpdated.removeListener(listener); resolve(); }, 15000);
         });
 
-        // Retry up to 3 times with 1.5s delay
+        // Wait for SPA hydration (3s) before extracting
+        await new Promise((r) => setTimeout(r, 3000));
+
+        // Inject content script to ensure it's available
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: bgTabId },
+            files: ["content.js"],
+          });
+        } catch { /* already injected */ }
+
+        // Extra wait for content script to settle
+        await new Promise((r) => setTimeout(r, 1000));
+
+        // Retry up to 3 times with 2s delay
         let response: any = null;
         for (let attempt = 1; attempt <= 3; attempt++) {
           response = await sendMessageToTab(bgTabId, { type: "CARTIFY_EXTRACT_VARIANTS" });
           if (response?.ok) break;
-          if (attempt < 3) await new Promise((r) => setTimeout(r, 1500));
+          if (attempt < 3) await new Promise((r) => setTimeout(r, 2000));
         }
 
         // Close background tab

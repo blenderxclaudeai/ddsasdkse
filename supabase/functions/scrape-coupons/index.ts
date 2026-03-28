@@ -74,7 +74,7 @@ Rules:
 - Maximum 15 codes`;
 
     try {
-      const aiRes = await fetch("https://ai.lovable.dev/api/v1/chat/completions", {
+      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${lovableApiKey}`,

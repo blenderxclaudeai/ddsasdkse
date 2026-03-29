@@ -99,7 +99,7 @@ function scrapeImage(): string | null {
     // Filter out logos/icons: too small or extreme aspect ratio
     if (w < 200 || h < 200) return;
     if (w / h > 3 || h / w > 3) return;
-    const src = img.src || img.dataset.src || img.dataset.lazySrc || "";
+    const src = img.currentSrc || img.src || img.dataset.src || img.dataset.lazySrc || "";
     if (area > largestArea && src && !src.startsWith("data:")) {
       largestArea = area;
       largest = img;

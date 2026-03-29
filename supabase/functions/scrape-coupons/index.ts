@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
     }
 
     // ── Tier 2: Google search scraping (free, no API credits) ──
-    let googleCoupons: any[] = [];
+    let discoveredCoupons: any[] = [];
     try {
       const year = new Date().getFullYear();
       const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(cleanDomain)}+coupon+code+${year}&num=10&hl=en`;
@@ -65,15 +65,15 @@ Deno.serve(async (req) => {
 
       if (googleRes.ok) {
         const html = await googleRes.text();
-        googleCoupons = extractCouponsFromSearchHtml(html, cleanDomain);
-        console.log(`[scrape-coupons] Google search found ${googleCoupons.length} codes for ${cleanDomain}`);
+        discoveredCoupons = extractCouponsFromSearchHtml(html, cleanDomain);
+        console.log(`[scrape-coupons] Google search found ${discoveredCoupons.length} codes for ${cleanDomain}`);
       }
     } catch (e) {
       console.error("[scrape-coupons] Google search failed:", e);
     }
 
     // ── Tier 3: AI fallback (only if Google found nothing) ──
-    if (googleCoupons.length === 0) {
+    if (discoveredCoupons.length === 0) {
       const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
       if (lovableApiKey) {
         try {
@@ -122,12 +122,14 @@ Rules:
             const aiCodes: any[] = Array.isArray(parsed)
               ? parsed
               : Array.isArray(parsed?.coupons) ? parsed.coupons : [];
-            googleCoupons = aiCodes.map((c: any) => ({
-              code: String(c.code || "").slice(0, 50),
-              description: String(c.description || "").slice(0, 200),
-              discount_type: c.discount_type || "other",
-              discount_value: c.discount_value ? String(c.discount_value).slice(0, 50) : null,
-            }));
+            discoveredCoupons = aiCodes
+              .map((c: any) => ({
+                code: String(c.code || "").trim().slice(0, 50),
+                description: String(c.description || "").slice(0, 200),
+                discount_type: c.discount_type || "other",
+                discount_value: c.discount_value ? String(c.discount_value).slice(0, 50) : null,
+              }))
+              .filter((c: any) => isValidCouponCode(c.code));
           } else {
             console.error("[scrape-coupons] AI request failed:", aiRes.status);
           }
@@ -138,7 +140,7 @@ Rules:
     }
 
     // If we found coupons, persist them
-    if (googleCoupons.length > 0) {
+    if (discoveredCoupons.length > 0) {
       // Delete old scraped coupons for this domain
       await supabase
         .from("retailer_coupons")
@@ -148,7 +150,7 @@ Rules:
 
       const now = new Date().toISOString();
       const expires = new Date(Date.now() + CACHE_TTL_MS).toISOString();
-      const rows = googleCoupons.slice(0, 15).map((c: any) => ({
+      const rows = discoveredCoupons.slice(0, 15).map((c: any) => ({
         domain: cleanDomain,
         code: String(c.code || "").slice(0, 50),
         description: String(c.description || "").slice(0, 200),
@@ -164,9 +166,9 @@ Rules:
         .insert(rows);
       if (insertError) console.error("Insert error:", insertError);
 
-      const aiResults = rows.map(({ scraped_at, expires_at, is_active, ...rest }) => rest);
+      const results = rows.map(({ scraped_at, expires_at, is_active, ...rest }) => rest);
       const manualResults = manualCoupons.map(({ scraped_at, ...rest }: any) => rest);
-      return new Response(JSON.stringify({ coupons: [...manualResults, ...aiResults] }), {
+      return new Response(JSON.stringify({ coupons: [...manualResults, ...results] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -185,9 +187,197 @@ Rules:
   }
 });
 
+// ── Massive blocklist of common words that appear in Google snippets ──
+
+const BLOCKLIST = new Set([
+  // English common words
+  "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was", "one",
+  "our", "out", "day", "get", "has", "him", "his", "how", "its", "may", "new", "now", "old",
+  "see", "way", "who", "did", "got", "let", "say", "she", "too", "use", "try", "buy", "top",
+  "off", "per", "set", "run", "hot", "big", "add", "end", "why", "own", "put", "red", "key",
+  "any", "few", "ago", "far", "lot", "yet", "due", "act", "age", "air", "art", "ask", "bad",
+  "bar", "bed", "bit", "box", "bus", "car", "cut", "dog", "ear", "eat", "eye", "fit", "fun",
+  "gas", "gun", "guy", "hat", "hit", "ice", "job", "kid", "law", "lay", "leg", "lie", "lip",
+  "map", "mix", "net", "nor", "oil", "pay", "pie", "pop", "pot", "raw", "row", "sea", "sit",
+  "six", "ski", "sky", "son", "sun", "tea", "ten", "tie", "tip", "toe", "war", "win", "yes",
+  "code", "find", "first", "page", "free", "best", "deal", "sale", "save", "shop", "site",
+  "home", "more", "than", "just", "been", "will", "with", "this", "that", "from", "your",
+  "have", "each", "make", "like", "long", "look", "many", "some", "them", "then", "what",
+  "when", "come", "here", "much", "take", "year", "most", "good", "give", "also", "back",
+  "work", "only", "well", "call", "used", "over", "last", "need", "keep", "help", "show",
+  "turn", "move", "live", "play", "feel", "tell", "does", "done", "made", "went", "came",
+  "left", "hand", "high", "line", "list", "link", "city", "data", "date", "down", "even",
+  "fact", "full", "goes", "half", "head", "idea", "kind", "knew", "late", "lead", "less",
+  "life", "lost", "main", "mark", "name", "near", "next", "note", "open", "part", "past",
+  "plan", "read", "real", "rest", "rule", "same", "seem", "side", "sign", "size", "step",
+  "sure", "talk", "team", "test", "text", "time", "true", "type", "unit", "upon", "view",
+  "wait", "walk", "want", "week", "went", "wide", "word", "zero", "area", "away", "body",
+  "book", "both", "case", "cost", "door", "draw", "drop", "else", "face", "fall", "fill",
+  "fine", "food", "foot", "form", "four", "game", "girl", "grow", "hold", "hope", "hour",
+  "huge", "join", "jump", "king", "land", "leave", "load", "lock", "mean", "mind", "miss",
+  "mine", "mode", "must", "nice", "none", "once", "pair", "pick", "pull", "push", "race",
+  "rain", "rate", "rich", "ride", "ring", "rise", "risk", "road", "rock", "role", "room",
+  "safe", "said", "seat", "sell", "send", "ship", "sing", "skin", "soft", "soil", "sort",
+  "star", "stay", "stop", "such", "suit", "swim", "tail", "term", "thin", "till", "took",
+  "tool", "tree", "trip", "upon", "user", "vary", "very", "vote", "wake", "wall", "warm",
+  "wash", "wear", "west", "whom", "wild", "wind", "wine", "wire", "wish", "wood", "wore",
+  "wrap", "yard",
+  // 5-letter common words
+  "about", "above", "after", "again", "along", "apply", "basic", "being", "below", "black",
+  "board", "brand", "break", "bring", "brown", "build", "carry", "catch", "cause", "chain",
+  "check", "child", "class", "clean", "clear", "click", "close", "could", "count", "cover",
+  "cross", "daily", "debug", "drink", "drive", "early", "eight", "email", "empty", "enjoy",
+  "enter", "equal", "error", "event", "every", "exact", "exist", "extra", "faith", "field",
+  "fight", "final", "first", "fixed", "flash", "floor", "focus", "force", "found", "fresh",
+  "front", "fully", "given", "glass", "going", "grade", "grand", "grant", "grass", "great",
+  "green", "gross", "group", "grown", "guess", "happy", "heart", "heavy", "hello", "horse",
+  "hotel", "house", "human", "ideal", "image", "index", "inner", "input", "issue", "items",
+  "joint", "judge", "juice", "known", "label", "large", "later", "laugh", "layer", "learn",
+  "legal", "level", "light", "limit", "local", "login", "lower", "lucky", "lunch", "magic",
+  "major", "match", "maybe", "media", "metal", "might", "minor", "model", "money", "month",
+  "moral", "motor", "mount", "mouse", "mouth", "music", "never", "night", "noise", "north",
+  "noted", "novel", "offer", "often", "order", "other", "outer", "owner", "paint", "panel",
+  "paper", "party", "patch", "peace", "phone", "photo", "piano", "piece", "pilot", "pitch",
+  "place", "plain", "plant", "plate", "plaza", "point", "pound", "power", "press", "price",
+  "pride", "prime", "print", "prior", "prize", "proof", "proud", "prove", "queen", "query",
+  "quest", "quick", "quiet", "quite", "quote", "radio", "raise", "range", "rapid", "reach",
+  "ready", "refer", "reign", "relax", "reply", "right", "rival", "river", "robot", "roger",
+  "roman", "rough", "round", "route", "royal", "rural", "sadly", "salad", "sauce", "scale",
+  "scene", "scope", "score", "sense", "serve", "seven", "shall", "shape", "share", "sharp",
+  "sheet", "shell", "shift", "shirt", "shock", "shoot", "short", "since", "sixth", "sixty",
+  "sleep", "slide", "small", "smart", "smell", "smile", "smoke", "solid", "solve", "sorry",
+  "sound", "south", "space", "spare", "speak", "speed", "spend", "split", "sport", "spray",
+  "stack", "staff", "stage", "stake", "stand", "start", "state", "steam", "steel", "steep",
+  "stick", "still", "stock", "stone", "store", "storm", "story", "strip", "stuck", "study",
+  "stuff", "style", "sugar", "suite", "super", "sweet", "swing", "table", "taken", "taste",
+  "teach", "teeth", "thank", "theme", "there", "these", "thick", "thing", "think", "third",
+  "those", "three", "throw", "tight", "title", "today", "token", "total", "touch", "tough",
+  "tower", "track", "trade", "train", "treat", "trend", "trial", "trick", "truck", "truly",
+  "trust", "twice", "under", "union", "unite", "unity", "until", "upper", "upset", "urban",
+  "usage", "usual", "valid", "value", "video", "viral", "visit", "vital", "vocal", "voice",
+  "voter", "waste", "watch", "water", "wheel", "where", "which", "while", "white", "whole",
+  "whose", "women", "world", "worse", "worst", "worth", "would", "wound", "write", "wrong",
+  "wrote", "young", "youth",
+  // 6+ letter common words that appear in search results
+  "online", "search", "promo", "coupon", "codes", "deals", "offers", "stores", "amazon",
+  "google", "please", "update", "review", "source", "market", "number", "change", "simple",
+  "result", "policy", "accept", "access", "across", "action", "active", "actual", "advice",
+  "affect", "afford", "allows", "almost", "always", "amount", "annual", "answer", "anyway",
+  "appear", "around", "arrive", "attack", "august", "basket", "battle", "beauty", "became",
+  "become", "before", "behind", "belief", "belong", "better", "beyond", "border", "bottom",
+  "bought", "branch", "breath", "bridge", "bright", "broken", "budget", "burden", "bureau",
+  "button", "cancel", "carbon", "career", "caused", "center", "centre", "chance", "charge",
+  "chosen", "church", "circle", "closed", "closer", "coffee", "column", "coming", "common",
+  "comply", "cookie", "corner", "costly", "cotton", "couple", "course", "covers", "create",
+  "credit", "crisis", "custom", "damage", "danger", "debate", "decade", "decide", "defeat",
+  "defend", "define", "degree", "demand", "depend", "deploy", "deputy", "desert", "design",
+  "desire", "detail", "detect", "device", "dinner", "direct", "doctor", "domain", "double",
+  "dozens", "driven", "driver", "during", "easily", "eating", "editor", "effect", "effort",
+  "eighth", "either", "eleven", "emerge", "empire", "enable", "ending", "energy", "engage",
+  "engine", "enough", "ensure", "entire", "entity", "equity", "escape", "estate", "ethnic",
+  "evolve", "exceed", "except", "excess", "excuse", "exempt", "expand", "expect", "expert",
+  "export", "expose", "extend", "extent", "fabric", "facing", "factor", "failed", "fairly",
+  "fallen", "family", "famous", "farmer", "father", "favour", "female", "figure", "filter",
+  "finger", "finish", "fiscal", "flight", "flying", "follow", "footer", "forced", "forest",
+  "forget", "formal", "format", "former", "foster", "fourth", "french", "friend", "frozen",
+  "future", "gained", "garden", "gather", "gender", "gentle", "german", "giving", "global",
+  "golden", "govern", "growth", "guilty", "guitar", "handle", "happen", "hardly", "hasn't",
+  "header", "health", "helped", "hidden", "highly", "honest", "hoping", "hunger", "hunter",
+  "ignore", "impact", "import", "impose", "income", "indeed", "inform", "injury", "insert",
+  "inside", "intact", "intend", "invest", "island", "itself", "jersey", "keeper", "kicked",
+  "killer", "kindly", "knight", "ladder", "launch", "lawyer", "leader", "league", "lender",
+  "lesson", "letter", "likely", "linked", "liquid", "listed", "listen", "little", "living",
+  "locate", "longer", "mainly", "manner", "margin", "marine", "marked", "matter", "medium",
+  "member", "memory", "mental", "merely", "method", "middle", "mighty", "miller", "mining",
+  "minute", "mirror", "mobile", "modern", "modest", "moment", "modify", "mostly", "motion",
+  "murder", "museum", "mutual", "myself", "namely", "narrow", "nation", "native", "nature",
+  "nearby", "nearly", "needed", "newest", "ninety", "nobody", "normal", "notice", "object",
+  "obtain", "occupy", "option", "orange", "origin", "others", "output", "oxford", "packed",
+  "palace", "parent", "partly", "patent", "people", "period", "permit", "person", "phrase",
+  "picked", "planet", "player", "plenty", "pocket", "poetry", "poison", "portal", "poster",
+  "potato", "prefer", "profit", "proper", "proven", "public", "pursue", "racial", "random",
+  "reader", "reason", "recent", "record", "reduce", "reform", "regard", "regime", "region",
+  "reject", "relate", "relief", "remain", "remove", "render", "rental", "repair", "repeat",
+  "report", "rescue", "resign", "resist", "resort", "retain", "retire", "return", "reveal",
+  "reward", "rhythm", "rising", "robust", "ruling", "runway", "sacred", "safety", "salary",
+  "sample", "saying", "scheme", "school", "screen", "script", "search", "season", "secret",
+  "sector", "secure", "seeing", "seemed", "select", "seller", "senior", "series", "server",
+  "settle", "severe", "shadow", "shared", "should", "signal", "silent", "silver", "simply",
+  "single", "slight", "smooth", "soccer", "social", "solely", "sought", "speech", "spirit",
+  "spread", "spring", "square", "stable", "status", "steady", "stolen", "strain", "strand",
+  "stream", "street", "stress", "strict", "strike", "string", "stroke", "strong", "struck",
+  "studio", "submit", "sudden", "suffer", "summit", "supply", "surely", "survey", "switch",
+  "symbol", "talent", "target", "taught", "temple", "tenant", "tender", "terror", "thanks",
+  "theirs", "theory", "thirty", "thorny", "though", "threat", "thrown", "ticket", "timber",
+  "tissue", "toward", "travel", "treaty", "tribal", "tricky", "trophy", "turned", "twelve",
+  "twenty", "unfair", "unique", "unless", "unlike", "unrest", "unused", "upbeat", "useful",
+  "valley", "varied", "vendor", "versus", "victim", "viewer", "virgin", "virtue", "vision",
+  "visual", "volume", "voting", "walker", "warmly", "wealth", "weapon", "weekly", "weight",
+  "wholly", "widely", "window", "winner", "winter", "wisdom", "within", "wonder", "wooden",
+  "worker", "worthy", "writer",
+  // German common words (seen in screenshot)
+  "auf", "und", "der", "die", "das", "ein", "eine", "mit", "von", "den", "ist", "dem",
+  "des", "fur", "wir", "sie", "hat", "bei", "aus", "wie", "als", "nur", "bis", "zum",
+  "doch", "auch", "nach", "oder", "wenn", "aber", "welt", "mehr", "noch", "sich", "wird",
+  "sein", "kann", "gibt", "uber", "alle", "diese", "dass", "denn", "hier", "dann", "ganz",
+  "sehr", "zwei", "drei", "mann", "frau", "kind", "land", "zeit", "jahr", "haus", "teil",
+  "hand", "wort", "werk", "bild", "recht", "gross", "klein", "lange", "letzt", "eigen",
+  "heute", "immer", "schon", "jetzt", "unter", "durch", "gegen", "zwischen",
+  // Swedish common words
+  "och", "att", "det", "som", "har", "med", "var", "hon", "han", "vad", "kan", "ska",
+  "inte", "alla", "bara", "hela", "till", "denna", "eller", "efter", "sedan", "andra",
+  "denna", "inga", "sina", "vara", "utan", "stor", "ovan", "bort", "fler", "mest",
+  // French
+  "les", "des", "est", "une", "pas", "que", "sur", "par", "pour", "dans", "avec",
+  "tout", "bien", "plus", "fait", "nous", "vous", "leur", "mais", "sont", "cela",
+  // Common web/search terms
+  "cookies", "privacy", "terms", "conditions", "shipping", "delivery", "returns",
+  "contact", "support", "account", "shopping", "discount", "percent", "savings",
+  "checkout", "payment", "purchase", "products", "category", "featured", "popular",
+  "trending", "website", "browser", "measure", "content", "display", "germany",
+  "english", "spanish", "twitter", "facebook", "youtube", "instagram", "linkedin",
+  "pinterest", "reddit", "tiktok", "whatsapp", "telegram",
+]);
+
+/**
+ * Validate whether a string looks like a real coupon code vs a random word.
+ * Real coupon codes typically:
+ * - Contain both letters AND digits (e.g., SAVE20, FALL2024, 10OFF)
+ * - OR are ≥5 uppercase letters that look promotional (e.g., WELCOME, FLASH, SIGNUP)
+ * - Are NOT common dictionary words
+ */
+function isValidCouponCode(code: string): boolean {
+  if (!code || code.length < 3 || code.length > 25) return false;
+
+  const upper = code.toUpperCase();
+
+  // Blocklist check (case-insensitive)
+  if (BLOCKLIST.has(code.toLowerCase())) return false;
+
+  // Must be mostly alphanumeric (allow hyphens and underscores in codes)
+  if (!/^[A-Z0-9_-]+$/i.test(code)) return false;
+
+  const hasLetter = /[A-Z]/i.test(code);
+  const hasDigit = /[0-9]/.test(code);
+
+  // Best case: contains both letters AND digits (e.g., SAVE20, 10OFF, FALL2024)
+  if (hasLetter && hasDigit) return true;
+
+  // Pure letter codes must be ≥5 chars and all uppercase to look promotional
+  if (hasLetter && !hasDigit) {
+    if (code.length >= 5 && code === upper) return true;
+    return false;
+  }
+
+  // Pure numbers are almost never coupon codes
+  if (hasDigit && !hasLetter) return false;
+
+  return false;
+}
+
 /**
  * Extract coupon codes from Google search result HTML snippets.
- * Looks for patterns like "Use code SAVE20" or "code: SUMMER25" near coupon-related keywords.
+ * Uses strict validation to avoid capturing random words.
  */
 function extractCouponsFromSearchHtml(html: string, domain: string): any[] {
   const coupons: any[] = [];
@@ -205,32 +395,30 @@ function extractCouponsFromSearchHtml(html: string, domain: string): any[] {
     .replace(/&quot;/g, '"')
     .replace(/\s+/g, " ");
 
-  // Pattern 1: "code" or "coupon" followed by an all-caps/alphanumeric code
+  // Pattern: look for coupon-like codes near coupon keywords
   const codePatterns = [
-    /(?:code|coupon|promo|voucher|rabatt|kupong)[:\s]+["']?([A-Z0-9]{3,20})["']?/gi,
-    /["']([A-Z0-9]{4,20})["']\s*(?:for|gives?|get|save|off|rabatt)/gi,
-    /(?:use|enter|apply|använd)\s+["']?([A-Z0-9]{3,20})["']?/gi,
-    /(?:code|kod|kode)[:\s]*([A-Z][A-Z0-9]{2,19})/gi,
+    /(?:code|coupon|promo|voucher|rabatt|kupong|gutschein)[:\s]+["']?([A-Z0-9_-]{3,25})["']?/gi,
+    /["']([A-Z0-9_-]{4,25})["']\s*(?:for|gives?|get|save|off|rabatt)/gi,
+    /(?:use|enter|apply|använd|nutze)\s+["']?([A-Z0-9_-]{3,25})["']?/gi,
+    /(?:code|kod|kode|gutscheincode)[:\s]*([A-Z][A-Z0-9_-]{2,24})/gi,
   ];
 
   for (const pattern of codePatterns) {
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(textContent)) !== null) {
-      const code = match[1].trim();
-      if (code.length < 3 || code.length > 20) continue;
+      const code = match[1].trim().toUpperCase();
+
       if (seenCodes.has(code)) continue;
-      // Skip common false positives
-      if (/^(THE|AND|FOR|OFF|GET|USE|BUY|NOW|NEW|TOP|ALL|HOW|OUR|OUT|SEE|TRY|ITS)$/i.test(code)) continue;
-      if (/^[0-9]+$/.test(code) && code.length < 4) continue; // pure short numbers
+      if (!isValidCouponCode(code)) continue;
 
       seenCodes.add(code);
 
-      // Try to extract discount info from surrounding context (100 chars around)
-      const idx = textContent.indexOf(code);
-      const context = textContent.substring(Math.max(0, idx - 100), idx + code.length + 100);
-      const discountMatch = context.match(/(\d{1,3})\s*%\s*(?:off|rabatt|discount|av)/i);
+      // Try to extract discount info from surrounding context
+      const idx = textContent.indexOf(match[1]);
+      const context = textContent.substring(Math.max(0, idx - 120), idx + match[1].length + 120);
+      const discountMatch = context.match(/(\d{1,3})\s*%\s*(?:off|rabatt|discount|av|Rabatt)/i);
       const fixedMatch = context.match(/(?:\$|€|£|kr)\s*(\d+(?:[.,]\d{2})?)\s*(?:off|rabatt|discount|av)/i);
-      const freeShip = /free.?ship|gratis.?frakt|fri.?frakt/i.test(context);
+      const freeShip = /free.?ship|gratis.?frakt|fri.?frakt|kostenlos.?versand/i.test(context);
 
       let discount_type = "other";
       let discount_value: string | null = null;

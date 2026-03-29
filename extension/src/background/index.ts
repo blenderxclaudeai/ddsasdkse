@@ -538,6 +538,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === "CARTIFY_STORE_VARIANTS") {
+    // Store pre-extracted variants from product page visit
+    const { product_url, variants } = msg.payload || {};
+    if (product_url && variants) {
+      const key = `cartify_variants_${btoa(product_url).slice(0, 40)}`;
+      chrome.storage.local.set({ [key]: variants }, () => {
+        sendResponse({ ok: true });
+      });
+    } else {
+      sendResponse({ ok: false });
+    }
+    return true;
+  }
+
   if (msg.type === "CARTIFY_ADD_TO_RETAILER_CART") {
     handleAddToRetailerCart(msg.payload).then(sendResponse);
     return true;
@@ -553,67 +567,76 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const targetDomain = getDomainFromUrl(targetUrl);
     (async () => {
       try {
+        // First check for pre-stored variants
+        const varKey = `cartify_variants_${btoa(targetUrl).slice(0, 40)}`;
+        const stored = await chrome.storage.local.get(varKey);
+        if (stored[varKey] && (stored[varKey].sizes?.length || stored[varKey].colors?.length)) {
+          sendResponse({ ok: true, variants: stored[varKey] });
+          return;
+        }
+
         // Try existing tabs first
         const tabs = await chrome.tabs.query({});
         const matchingTab = tabs.find((t) => t.url && getDomainFromUrl(t.url) === targetDomain);
         if (matchingTab?.id) {
           const response = await sendMessageToTab(matchingTab.id, { type: "CARTIFY_EXTRACT_VARIANTS" });
-          sendResponse(response || { ok: false });
-          return;
+          if (response?.ok && response?.variants && (response.variants.sizes?.length || response.variants.colors?.length)) {
+            sendResponse(response);
+            return;
+          }
         }
 
-        // No matching tab — open a background tab
-        const bgTab = await new Promise<chrome.tabs.Tab | null>((resolve) => {
-          chrome.tabs.create({ url: targetUrl, active: false }, (tab) => {
+        // No pre-stored variants, no matching tab with results — open FOREGROUND tab
+        // (Background tabs don't hydrate SPAs, so we use a visible tab)
+        const fgTab = await new Promise<chrome.tabs.Tab | null>((resolve) => {
+          chrome.tabs.create({ url: targetUrl, active: true }, (tab) => {
             if (chrome.runtime.lastError || !tab) { resolve(null); return; }
             resolve(tab);
           });
         });
 
-        if (!bgTab?.id) {
-          sendResponse({ ok: false, error: "Could not open background tab" });
+        if (!fgTab?.id) {
+          sendResponse({ ok: false, error: "Could not open product page" });
           return;
         }
 
-        const bgTabId = bgTab.id;
+        const fgTabId = fgTab.id;
 
         // Wait for tab to complete loading
         await new Promise<void>((resolve) => {
           const listener = (tid: number, info: chrome.tabs.TabChangeInfo) => {
-            if (tid === bgTabId && info.status === "complete") {
+            if (tid === fgTabId && info.status === "complete") {
               chrome.tabs.onUpdated.removeListener(listener);
               resolve();
             }
           };
           chrome.tabs.onUpdated.addListener(listener);
-          // Timeout after 15s
           setTimeout(() => { chrome.tabs.onUpdated.removeListener(listener); resolve(); }, 15000);
         });
 
-        // Wait for SPA hydration (3s) before extracting
+        // Wait for SPA hydration
         await new Promise((r) => setTimeout(r, 3000));
 
-        // Inject content script to ensure it's available
+        // Inject content script
         try {
           await chrome.scripting.executeScript({
-            target: { tabId: bgTabId },
+            target: { tabId: fgTabId },
             files: ["content.js"],
           });
         } catch { /* already injected */ }
 
-        // Extra wait for content script to settle
         await new Promise((r) => setTimeout(r, 1000));
 
-        // Retry up to 3 times with 2s delay
+        // Retry up to 3 times
         let response: any = null;
         for (let attempt = 1; attempt <= 3; attempt++) {
-          response = await sendMessageToTab(bgTabId, { type: "CARTIFY_EXTRACT_VARIANTS" });
-          if (response?.ok) break;
+          response = await sendMessageToTab(fgTabId, { type: "CARTIFY_EXTRACT_VARIANTS" });
+          if (response?.ok && response?.variants && (response.variants.sizes?.length || response.variants.colors?.length)) break;
           if (attempt < 3) await new Promise((r) => setTimeout(r, 2000));
         }
 
-        // Close background tab
-        try { chrome.tabs.remove(bgTabId); } catch {}
+        // Close the tab after extraction
+        try { chrome.tabs.remove(fgTabId); } catch {}
 
         sendResponse(response || { ok: false });
       } catch {

@@ -70,6 +70,26 @@ function storeDetectedProduct() {
   }
 }
 
+/** Pre-extract variants on product pages and store them for later use */
+function preExtractAndStoreVariants() {
+  // Wait a bit for SPA hydration before extracting
+  setTimeout(() => {
+    waitForVariantElements(3000).then(() => {
+      try {
+        const variants = extractVariants();
+        if (variants && (variants.sizes?.length || variants.colors?.length)) {
+          const productUrl = location.href;
+          chrome.runtime.sendMessage({
+            type: "CARTIFY_STORE_VARIANTS",
+            payload: { product_url: productUrl, variants },
+          }, () => { /* stored */ });
+          console.log("[Cartify] Pre-extracted variants:", variants);
+        }
+      } catch { /* ignore */ }
+    });
+  }, 1500);
+}
+
 // ── Listing page: card button handling ──
 
 const injectedCards = new WeakSet<HTMLElement>();
@@ -118,14 +138,12 @@ function handleCartClick(card: HTMLElement, btn: HTMLElement) {
     return;
   }
 
-  // Extract variants NOW while user is on the page (not later in background tab)
-  let variants: ProductVariants | null = null;
-  try {
-    variants = extractVariants();
-  } catch { /* ignore */ }
+  // DON'T extract variants on listing pages — there are no variant selectors here.
+  // Variants will be pre-extracted when user visits the product page, or
+  // fetched via foreground tab fallback during the variant selection flow.
 
   chrome.runtime.sendMessage(
-    { type: "CARTIFY_ADD_TO_CART", payload, variants: variants || undefined },
+    { type: "CARTIFY_ADD_TO_CART", payload },
     (response) => {
       if (chrome.runtime.lastError) {
         showToastNotification("Extension error", "error");
@@ -250,6 +268,8 @@ function evaluatePage() {
         removeLoginPill();
         removeAllCardButtons();
         storeDetectedProduct();
+        // Pre-extract variants NOW while user is on the product page
+        preExtractAndStoreVariants();
         // No floating "Try On" button — side panel handles it
       } else {
         injectLoginPill();

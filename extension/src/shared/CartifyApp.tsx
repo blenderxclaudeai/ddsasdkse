@@ -543,6 +543,7 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         i.id === item.id ? { ...i, in_cart: newInCart, interaction_type: newInCart ? "cart" : "viewed" } : i
       )
     );
+    setSessionDirty(true);
     chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
     // Background re-sync to keep state fresh
     setTimeout(() => loadSessionItems(false), 500);

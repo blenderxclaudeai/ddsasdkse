@@ -117,8 +117,15 @@ function handleCartClick(card: HTMLElement, btn: HTMLElement) {
     showToastNotification("Could not identify product", "error");
     return;
   }
+
+  // Extract variants NOW while user is on the page (not later in background tab)
+  let variants: ProductVariants | null = null;
+  try {
+    variants = extractVariants();
+  } catch { /* ignore */ }
+
   chrome.runtime.sendMessage(
-    { type: "CARTIFY_ADD_TO_CART", payload },
+    { type: "CARTIFY_ADD_TO_CART", payload, variants: variants || undefined },
     (response) => {
       if (chrome.runtime.lastError) {
         showToastNotification("Extension error", "error");

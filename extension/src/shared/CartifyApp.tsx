@@ -582,8 +582,24 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     fetchVariantsForItem(currentCartItems[0]);
   };
 
-  const fetchVariantsForItem = (item: SessionItem) => {
+  const fetchVariantsForItem = async (item: SessionItem) => {
     if (extractedVariants[item.id]) return; // already fetched
+
+    // Check for pre-stored variants first (extracted at add-to-cart time)
+    const key = `cartify_variants_${btoa(item.product_url).slice(0, 40)}`;
+    const stored = await chrome.storage.local.get(key);
+    if (stored[key] && (stored[key].sizes?.length || stored[key].colors?.length)) {
+      setExtractedVariants((prev) => ({
+        ...prev,
+        [item.id]: {
+          sizes: stored[key].sizes || [],
+          colors: stored[key].colors || [],
+        },
+      }));
+      return;
+    }
+
+    // Fallback: extract via background tab
     setVariantsLoading(true);
     chrome.runtime.sendMessage(
       { type: "CARTIFY_EXTRACT_VARIANTS", payload: { product_url: item.product_url } },

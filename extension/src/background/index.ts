@@ -520,8 +520,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg.type === "CARTIFY_ADD_TO_CART") {
-    addSessionItem(msg.payload, "cart", true).then((ok) => {
-      if (ok) updateCartBadge();
+    const variants = msg.variants;
+    addSessionItem(msg.payload, "cart", true).then(async (ok) => {
+      if (ok) {
+        updateCartBadge();
+        // Store pre-extracted variants if available
+        if (variants && (variants.sizes?.length || variants.colors?.length)) {
+          const productUrl = msg.payload?.product_url;
+          if (productUrl) {
+            const key = `cartify_variants_${btoa(productUrl).slice(0, 40)}`;
+            await chrome.storage.local.set({ [key]: variants });
+          }
+        }
+      }
       sendResponse({ ok });
     });
     return true;

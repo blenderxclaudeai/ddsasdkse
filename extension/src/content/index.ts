@@ -1,4 +1,4 @@
-import { extractProduct, extractVariants, waitForVariantElements } from "./productExtract";
+import { extractProduct, extractVariants, waitForVariantElements, type ProductVariants } from "./productExtract";
 import { isListingPage, findCardContainers, extractFromCard, extractFallbackFromLink } from "./productGrid";
 import {
   injectButton,

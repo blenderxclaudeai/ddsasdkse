@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -28,31 +28,34 @@ Deno.serve(async (req) => {
 
     const cleanDomain = domain.replace(/^www\./, "");
 
-    // Check for fresh cached coupons (scraped within last 24h)
+    // Check for cached coupons in DB
     const { data: cached } = await supabase
       .from("retailer_coupons")
       .select("code,description,discount_type,discount_value,min_purchase,scraped_at")
       .eq("domain", cleanDomain)
       .eq("is_active", true);
 
-    if (cached && cached.length > 0) {
-      const hasFreshScraped = cached.some(
-        (c: any) => c.scraped_at && Date.now() - new Date(c.scraped_at).getTime() < CACHE_TTL_MS
-      );
-      const manualCoupons = cached.filter((c: any) => !c.scraped_at);
+    const manualCoupons = (cached || []).filter((c: any) => !c.scraped_at);
+    const scrapedCoupons = (cached || []).filter((c: any) => c.scraped_at);
+    const hasFreshScraped = scrapedCoupons.some(
+      (c: any) => Date.now() - new Date(c.scraped_at).getTime() < CACHE_TTL_MS
+    );
 
-      if (hasFreshScraped || manualCoupons.length > 0) {
-        return new Response(
-          JSON.stringify({ coupons: cached.map(({ scraped_at, ...rest }: any) => rest) }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+    // If we have fresh scraped data OR manual entries, return them without calling AI
+    if (hasFreshScraped || (manualCoupons.length > 0 && scrapedCoupons.length > 0)) {
+      const all = [...manualCoupons, ...scrapedCoupons];
+      return new Response(
+        JSON.stringify({ coupons: all.map(({ scraped_at, ...rest }: any) => rest) }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    // Use AI to discover coupons (aggregator scraping is blocked by Cloudflare)
+    // Need AI discovery — only if no fresh scraped coupons exist
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!lovableApiKey) {
-      return new Response(JSON.stringify({ coupons: [] }), {
+      // No API key — return whatever manual coupons we have
+      const fallback = manualCoupons.map(({ scraped_at, ...rest }: any) => rest);
+      return new Response(JSON.stringify({ coupons: fallback }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -81,7 +84,7 @@ Rules:
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "google/gemini-2.5-flash-lite",
           messages: [
             { role: "system", content: "You are a coupon code expert. Return only valid JSON arrays of coupon codes. Be honest — if you don't know any codes, return an empty array." },
             { role: "user", content: aiPrompt },
@@ -92,7 +95,9 @@ Rules:
 
       if (!aiRes.ok) {
         console.error("AI request failed:", aiRes.status);
-        return new Response(JSON.stringify({ coupons: [] }), {
+        // On 402 or any error, return whatever DB coupons we have (manual + stale scraped)
+        const fallback = (cached || []).map(({ scraped_at, ...rest }: any) => rest);
+        return new Response(JSON.stringify({ coupons: fallback }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -115,7 +120,9 @@ Rules:
         : [];
 
       if (coupons.length === 0) {
-        return new Response(JSON.stringify({ coupons: [] }), {
+        // AI found nothing — return manual coupons if any
+        const fallback = manualCoupons.map(({ scraped_at, ...rest }: any) => rest);
+        return new Response(JSON.stringify({ coupons: fallback }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -149,13 +156,17 @@ Rules:
         console.error("Insert error:", insertError);
       }
 
-      const result = rows.map(({ scraped_at, expires_at, is_active, ...rest }) => rest);
-      return new Response(JSON.stringify({ coupons: result }), {
+      // Return AI results + manual coupons
+      const aiResults = rows.map(({ scraped_at, expires_at, is_active, ...rest }) => rest);
+      const manualResults = manualCoupons.map(({ scraped_at, ...rest }: any) => rest);
+      return new Response(JSON.stringify({ coupons: [...manualResults, ...aiResults] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } catch (aiError) {
       console.error("AI discovery error:", aiError);
-      return new Response(JSON.stringify({ coupons: [] }), {
+      // Return whatever DB coupons we have
+      const fallback = (cached || []).map(({ scraped_at, ...rest }: any) => rest);
+      return new Response(JSON.stringify({ coupons: fallback }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

@@ -221,13 +221,14 @@ function scrapePrice(): string | null {
     }
   }
 
-  // 4. CSS selectors — common price patterns on retailer sites
+  // 4. CSS selectors — common price patterns on retailer sites (restricted to product areas)
   const priceSelectors = [
     "[data-price]",
     "[data-testid*='price' i]",
     "[data-testid*='current-price' i]",
+    "[data-testid*='product'] [data-testid*='price']",
     "[data-qa*='price' i]",
-    "[id*='price' i]",
+    "[id*='price' i]:not(nav *, footer *, header *)",
     "[class*='product-price'] [class*='current']",
     "[class*='product-price'] [class*='sale']",
     "[class*='product-price']",
@@ -241,11 +242,14 @@ function scrapePrice(): string | null {
     "[class*='current-price']",
     "[class*='Price'] [class*='current']",
     "[class*='Price'] [class*='sale']",
-    "[class*='money']",
-    "[class*='amount']",
+    "[class*='money']:not(nav *, footer *, header *)",
+    "[class*='amount']:not(nav *, footer *, header *)",
     ".price .now",
     ".price-box .price",
     "[class*='price'] [class*='now']",
+    "main [class*='price' i]",
+    "article [class*='price' i]",
+    "[class*='product' i] [class*='price' i]",
     "[class*='price']",
   ];
 

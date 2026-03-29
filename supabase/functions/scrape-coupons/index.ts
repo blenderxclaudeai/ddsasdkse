@@ -50,29 +50,48 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Tier 2: Google search scraping (free, no API credits) ──
+    // ── Tier 1: Firecrawl search (reliable, handles anti-bot) ──
     let discoveredCoupons: any[] = [];
-    try {
-      const year = new Date().getFullYear();
-      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(cleanDomain)}+coupon+code+${year}&num=10&hl=en`;
-      const googleRes = await fetch(searchUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-      });
+    const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
+    if (firecrawlKey) {
+      try {
+        const year = new Date().getFullYear();
+        const searchQuery = `${cleanDomain} coupon code ${year}`;
+        console.log(`[scrape-coupons] Firecrawl search: "${searchQuery}"`);
 
-      if (googleRes.ok) {
-        const html = await googleRes.text();
-        discoveredCoupons = extractCouponsFromSearchHtml(html, cleanDomain);
-        console.log(`[scrape-coupons] Google search found ${discoveredCoupons.length} codes for ${cleanDomain}`);
+        const fcRes = await fetch("https://api.firecrawl.dev/v1/search", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${firecrawlKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            query: searchQuery,
+            limit: 5,
+            scrapeOptions: { formats: ["markdown"] },
+          }),
+        });
+
+        if (fcRes.ok) {
+          const fcData = await fcRes.json();
+          const results = fcData?.data || [];
+          // Combine all markdown content from search results
+          let combinedText = "";
+          for (const r of results) {
+            combinedText += " " + (r.markdown || r.description || "");
+          }
+          discoveredCoupons = extractCouponsFromText(combinedText, cleanDomain);
+          console.log(`[scrape-coupons] Firecrawl found ${discoveredCoupons.length} codes for ${cleanDomain}`);
+        } else {
+          const errText = await fcRes.text();
+          console.error(`[scrape-coupons] Firecrawl failed [${fcRes.status}]:`, errText);
+        }
+      } catch (e) {
+        console.error("[scrape-coupons] Firecrawl error:", e);
       }
-    } catch (e) {
-      console.error("[scrape-coupons] Google search failed:", e);
     }
 
-    // ── Tier 3: AI fallback (only if Google found nothing) ──
+    // ── Tier 2: AI fallback (only if Firecrawl found nothing) ──
     if (discoveredCoupons.length === 0) {
       const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
       if (lovableApiKey) {
@@ -187,7 +206,7 @@ Rules:
   }
 });
 
-// ── Massive blocklist of common words that appear in Google snippets ──
+// ── Massive blocklist of common words that appear in search snippets ──
 
 const BLOCKLIST = new Set([
   // English common words
@@ -341,10 +360,6 @@ const BLOCKLIST = new Set([
 
 /**
  * Validate whether a string looks like a real coupon code vs a random word.
- * Real coupon codes typically:
- * - Contain both letters AND digits (e.g., SAVE20, FALL2024, 10OFF)
- * - OR are ≥5 uppercase letters that look promotional (e.g., WELCOME, FLASH, SIGNUP)
- * - Are NOT common dictionary words
  */
 function isValidCouponCode(code: string): boolean {
   if (!code || code.length < 3 || code.length > 25) return false;
@@ -376,36 +391,27 @@ function isValidCouponCode(code: string): boolean {
 }
 
 /**
- * Extract coupon codes from Google search result HTML snippets.
+ * Extract coupon codes from text content (Firecrawl markdown or any text).
  * Uses strict validation to avoid capturing random words.
  */
-function extractCouponsFromSearchHtml(html: string, domain: string): any[] {
+function extractCouponsFromText(text: string, domain: string): any[] {
   const coupons: any[] = [];
   const seenCodes = new Set<string>();
 
-  // Remove HTML tags but keep text content — work with visible snippets
-  const textContent = html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, " ");
-
   // Pattern: look for coupon-like codes near coupon keywords
   const codePatterns = [
-    /(?:code|coupon|promo|voucher|rabatt|kupong|gutschein)[:\s]+["']?([A-Z0-9_-]{3,25})["']?/gi,
-    /["']([A-Z0-9_-]{4,25})["']\s*(?:for|gives?|get|save|off|rabatt)/gi,
-    /(?:use|enter|apply|använd|nutze)\s+["']?([A-Z0-9_-]{3,25})["']?/gi,
+    /(?:code|coupon|promo|voucher|rabatt|kupong|gutschein)[:\s]+["'`]?([A-Z0-9_-]{3,25})["'`]?/gi,
+    /["'`]([A-Z0-9_-]{4,25})["'`]\s*(?:for|gives?|get|save|off|rabatt)/gi,
+    /(?:use|enter|apply|använd|nutze)\s+["'`]?([A-Z0-9_-]{3,25})["'`]?/gi,
     /(?:code|kod|kode|gutscheincode)[:\s]*([A-Z][A-Z0-9_-]{2,24})/gi,
+    // Markdown bold/code patterns: **CODE** or `CODE`
+    /\*\*([A-Z0-9_-]{4,25})\*\*/g,
+    /`([A-Z0-9_-]{4,25})`/g,
   ];
 
   for (const pattern of codePatterns) {
     let match: RegExpExecArray | null;
-    while ((match = pattern.exec(textContent)) !== null) {
+    while ((match = pattern.exec(text)) !== null) {
       const code = match[1].trim().toUpperCase();
 
       if (seenCodes.has(code)) continue;
@@ -414,8 +420,8 @@ function extractCouponsFromSearchHtml(html: string, domain: string): any[] {
       seenCodes.add(code);
 
       // Try to extract discount info from surrounding context
-      const idx = textContent.indexOf(match[1]);
-      const context = textContent.substring(Math.max(0, idx - 120), idx + match[1].length + 120);
+      const idx = text.indexOf(match[1]);
+      const context = text.substring(Math.max(0, idx - 120), idx + match[1].length + 120);
       const discountMatch = context.match(/(\d{1,3})\s*%\s*(?:off|rabatt|discount|av|Rabatt)/i);
       const fixedMatch = context.match(/(?:\$|€|£|kr)\s*(\d+(?:[.,]\d{2})?)\s*(?:off|rabatt|discount|av)/i);
       const freeShip = /free.?ship|gratis.?frakt|fri.?frakt|kostenlos.?versand/i.test(context);

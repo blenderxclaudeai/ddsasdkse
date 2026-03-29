@@ -402,35 +402,167 @@ async function handleAddToRetailerCart(payload: any): Promise<any> {
 
   const targetDomain = payload?.retailer_domain || getDomainFromUrl(targetUrl) || "";
 
-  const activeTab = await new Promise<{ id?: number; url?: string } | null>((resolve) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      resolve(tabs?.[0] || null);
+  // If variant is already provided, go straight to opening the tab
+  if (payload?.variant && (payload.variant.size || payload.variant.color)) {
+    return openRetailerTabWithVariant(targetUrl, targetDomain, payload.variant);
+  }
+
+  // Check for pre-stored variants first
+  const varKey = `cartify_variants_${btoa(targetUrl).slice(0, 40)}`;
+  const storedVars = await chrome.storage.local.get(varKey);
+  const cachedVariants = storedVars[varKey];
+
+  if (cachedVariants && (cachedVariants.sizes?.length || cachedVariants.colors?.length)) {
+    // Variants available — signal UI to show variant picker, DON'T open tab yet
+    return { ok: true, needsVariantSelection: true, variants: cachedVariants };
+  }
+
+  // No cached variants — open foreground tab, extract variants from live page
+  const fgTab = await new Promise<chrome.tabs.Tab | null>((resolve) => {
+    const redirectUrl = `${SUPABASE_URL}/functions/v1/redirect?target=${encodeURIComponent(targetUrl)}&retailerDomain=${encodeURIComponent(targetDomain)}`;
+    chrome.tabs.create({ url: redirectUrl, active: true }, (tab) => {
+      if (chrome.runtime.lastError || !tab) { resolve(null); return; }
+      resolve(tab);
     });
   });
 
-  if (activeTab?.id && activeTab.url) {
-    const activeDomain = getDomainFromUrl(activeTab.url);
-    const sameDomain = activeDomain && targetDomain && activeDomain === targetDomain;
-
-    if (sameDomain) {
-      const response = await sendMessageToTab(activeTab.id, {
-        type: "CARTIFY_ADD_TO_RETAILER_CART",
-        payload: { target_url: targetUrl, variant: payload?.variant },
-      });
-      if (response?.ok) {
-        return { ok: true, clickedCurrentPage: true };
-      }
-    }
+  if (!fgTab?.id) {
+    return { ok: false, error: "Could not open retailer product page" };
   }
 
-  const redirectUrl = `${SUPABASE_URL}/functions/v1/redirect?target=${encodeURIComponent(targetUrl)}&retailerDomain=${encodeURIComponent(targetDomain)}`;
+  const fgTabId = fgTab.id;
 
+  // Wait for tab to complete loading
+  await new Promise<void>((resolve) => {
+    const listener = (tid: number, info: chrome.tabs.TabChangeInfo) => {
+      if (tid === fgTabId && info.status === "complete") {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    setTimeout(() => { chrome.tabs.onUpdated.removeListener(listener); resolve(); }, 15000);
+  });
+
+  // Wait for SPA hydration
+  await new Promise((r) => setTimeout(r, 3000));
+
+  // Inject content script
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: fgTabId },
+      files: ["content.js"],
+    });
+  } catch { /* already injected */ }
+
+  await new Promise((r) => setTimeout(r, 1000));
+
+  // Extract variants from the live page
+  let extractedVariants: any = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const response = await sendMessageToTab(fgTabId, { type: "CARTIFY_EXTRACT_VARIANTS" });
+    if (response?.ok && response?.variants && (response.variants.sizes?.length || response.variants.colors?.length)) {
+      extractedVariants = response.variants;
+      break;
+    }
+    if (attempt < 3) await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  if (extractedVariants && (extractedVariants.sizes?.length || extractedVariants.colors?.length)) {
+    // Store for future use
+    await chrome.storage.local.set({ [varKey]: extractedVariants });
+
+    // Store pending tab — DON'T close it; the user will select variants then we add-to-cart on THIS tab
+    const stored = await chrome.storage.local.get("cartify_pending_retailer_carts");
+    const pendingCarts: Record<string, any> = stored.cartify_pending_retailer_carts || {};
+    pendingCarts[String(fgTabId)] = {
+      tabId: fgTabId,
+      targetUrl,
+      variant: null,
+      createdAt: Date.now(),
+      awaitingVariant: true,
+    };
+    await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
+
+    return { ok: true, needsVariantSelection: true, variants: extractedVariants, openedTabId: fgTabId };
+  }
+
+  // No variants found — just add to cart directly on the open tab
+  const stored = await chrome.storage.local.get("cartify_pending_retailer_carts");
+  const pendingCarts: Record<string, any> = stored.cartify_pending_retailer_carts || {};
+  pendingCarts[String(fgTabId)] = {
+    tabId: fgTabId,
+    targetUrl,
+    variant: null,
+    createdAt: Date.now(),
+  };
+  await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
+
+  return { ok: true, openedProductTab: true };
+}
+
+async function openRetailerTabWithVariant(targetUrl: string, targetDomain: string, variant: any): Promise<any> {
+  // Check if there's already an open tab for this URL (from variant extraction)
+  const stored = await chrome.storage.local.get("cartify_pending_retailer_carts");
+  const pendingCarts: Record<string, any> = stored.cartify_pending_retailer_carts || {};
+  
+  // Find existing tab awaiting variant
+  for (const [tabIdStr, pending] of Object.entries(pendingCarts)) {
+    if (pending.awaitingVariant && pending.targetUrl === targetUrl) {
+      // Reuse this tab — update variant and let onUpdated handler do its job
+      pendingCarts[tabIdStr] = {
+        ...pending,
+        variant,
+        awaitingVariant: false,
+      };
+      await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
+      
+      // Directly try to add to cart on this tab NOW
+      const tabId = parseInt(tabIdStr);
+      try {
+        await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+      } catch { /* already injected */ }
+      await new Promise((r) => setTimeout(r, 500));
+      
+      const response = await sendMessageToTab(tabId, {
+        type: "CARTIFY_ADD_TO_RETAILER_CART",
+        payload: { target_url: targetUrl, variant },
+      });
+      
+      if (response?.ok) {
+        delete pendingCarts[tabIdStr];
+        await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
+        await chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
+        setTimeout(() => { try { chrome.tabs.remove(tabId); } catch {} }, 2000);
+        return { ok: true, addedToCart: true };
+      }
+      
+      // Retry once
+      await new Promise((r) => setTimeout(r, 1500));
+      const retry = await sendMessageToTab(tabId, {
+        type: "CARTIFY_ADD_TO_RETAILER_CART",
+        payload: { target_url: targetUrl, variant },
+      });
+      
+      delete pendingCarts[tabIdStr];
+      await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
+      
+      if (retry?.ok) {
+        await chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
+        setTimeout(() => { try { chrome.tabs.remove(tabId); } catch {} }, 2000);
+        return { ok: true, addedToCart: true };
+      }
+      
+      setTimeout(() => { try { chrome.tabs.remove(tabId); } catch {} }, 1000);
+      return { ok: false, error: "Could not click add-to-cart on retailer page" };
+    }
+  }
+  
+  // No existing tab — open a new one with the variant
+  const redirectUrl = `${SUPABASE_URL}/functions/v1/redirect?target=${encodeURIComponent(targetUrl)}&retailerDomain=${encodeURIComponent(targetDomain)}`;
   const openedTab = await new Promise<{ id?: number } | null>((resolve) => {
     chrome.tabs.create({ url: redirectUrl, active: true }, (tab) => {
-      if (chrome.runtime.lastError) {
-        resolve(null);
-        return;
-      }
+      if (chrome.runtime.lastError) { resolve(null); return; }
       resolve(tab || null);
     });
   });
@@ -439,13 +571,10 @@ async function handleAddToRetailerCart(payload: any): Promise<any> {
     return { ok: false, error: "Could not open retailer product page" };
   }
 
-  // Store pending cart item keyed by tabId
-  const stored = await chrome.storage.local.get("cartify_pending_retailer_carts");
-  const pendingCarts: Record<string, any> = stored.cartify_pending_retailer_carts || {};
   pendingCarts[String(openedTab.id)] = {
     tabId: openedTab.id,
     targetUrl,
-    variant: payload?.variant || null,
+    variant,
     createdAt: Date.now(),
   };
   await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });

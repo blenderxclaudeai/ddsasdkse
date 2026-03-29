@@ -74,7 +74,7 @@ function storeDetectedProduct() {
 function preExtractAndStoreVariants() {
   // Wait a bit for SPA hydration before extracting
   setTimeout(() => {
-    waitForVariantElements(3000).then(() => {
+    waitForVariantElements(5000).then(() => {
       try {
         const variants = extractVariants();
         if (variants && (variants.sizes?.length || variants.colors?.length)) {
@@ -87,7 +87,7 @@ function preExtractAndStoreVariants() {
         }
       } catch { /* ignore */ }
     });
-  }, 1500);
+  }, 2000);
 }
 
 // ── Listing page: card button handling ──

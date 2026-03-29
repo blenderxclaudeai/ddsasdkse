@@ -250,6 +250,8 @@ function evaluatePage() {
         removeLoginPill();
         removeAllCardButtons();
         storeDetectedProduct();
+        // Pre-extract variants NOW while user is on the product page
+        preExtractAndStoreVariants();
         // No floating "Try On" button — side panel handles it
       } else {
         injectLoginPill();

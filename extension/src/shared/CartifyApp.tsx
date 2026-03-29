@@ -881,13 +881,24 @@ export function CartifyApp({ mode }: CartifyAppProps) {
             <h2 className="text-[16px] font-semibold tracking-tight text-foreground">Shopping Session</h2>
             <p className="text-[11px] text-muted-foreground">Products you've interacted with today</p>
           </div>
-          <button
-            onClick={() => { void loadSessionItems(true); }}
-            className="text-muted-foreground text-[14px] px-2 py-1 rounded-lg hover:bg-secondary hover:text-foreground transition-colors"
-            title="Refresh"
-          >
-            ↻
-          </button>
+          <div className="flex items-center gap-1">
+            {sessionDirty && (
+              <button
+                onClick={() => { setSessionDirty(false); void loadSessionItems(true); }}
+                className="text-muted-foreground text-[14px] px-2 py-1 rounded-lg hover:bg-secondary hover:text-foreground transition-colors"
+                title="Undo changes"
+              >
+                ←
+              </button>
+            )}
+            <button
+              onClick={() => { void loadSessionItems(true); }}
+              className="text-muted-foreground text-[14px] px-2 py-1 rounded-lg hover:bg-secondary hover:text-foreground transition-colors"
+              title="Refresh"
+            >
+              ↻
+            </button>
+          </div>
         </div>
       ) : screen === "profile" ? (
         <div className="shrink-0 px-5 pb-2">

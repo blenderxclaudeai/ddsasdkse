@@ -424,18 +424,20 @@ export async function waitForVariantElements(timeoutMs = 3000): Promise<void> {
   const POLL_INTERVAL = 500;
   const deadline = Date.now() + timeoutMs;
 
+  // Only compound/specific selectors — no bare [class*='size' i] that match footer
   const variantSelectors = [
     "select[name*='size' i]", "select[id*='size' i]",
     "[class*='size' i][class*='selector' i]", "[class*='size' i][class*='option' i]",
     "[class*='size' i][class*='picker' i]", "[data-testid*='size' i]",
     "[role='radiogroup'][aria-label*='size' i]",
-    "[class*='size' i] button", "[class*='size' i] li", "[class*='size' i] a",
-    "[aria-label*='size' i] button",
     "select[name*='color' i]", "select[name*='colour' i]",
     "[class*='color' i][class*='selector' i]", "[class*='colour' i][class*='selector' i]",
     "[class*='color' i][class*='picker' i]", "[data-testid*='color' i]",
     "[role='radiogroup'][aria-label*='color' i]",
-    "[class*='color' i] button", "[class*='colour' i] button",
+    // Universal fallback: select/radiogroup/fieldset inside product areas
+    "main select", "article select", "form select",
+    "main [role='radiogroup']", "article [role='radiogroup']",
+    "main fieldset", "article fieldset",
   ];
 
   while (Date.now() < deadline) {

@@ -704,6 +704,86 @@ function extractColorsFromDom(colors: Set<string>): void {
   }
 }
 
+/** Universal fallback: scan select, radiogroup, fieldset inside product areas */
+function extractUniversalFallback(sizes: Set<string>, colors: Set<string>): void {
+  const productAreas = document.querySelectorAll<HTMLElement>(PRODUCT_AREA_SELECTORS);
+  
+  for (const area of productAreas) {
+    // Find selects
+    const selects = area.querySelectorAll<HTMLSelectElement>("select");
+    for (const sel of selects) {
+      if (isInsideExcludedArea(sel)) continue;
+      const label = inferLabelFor(sel);
+      const isSize = /size|storlek|taille|größe|talla/i.test(label);
+      const isColor = /colo[u]?r|färg|couleur|farbe/i.test(label);
+      if (!isSize && !isColor) continue;
+      
+      for (const opt of sel.options) {
+        const val = opt.text.trim();
+        if (!val || opt.disabled || /select|choose|pick|välj|wähle/i.test(val)) continue;
+        if (isSize && isValidSizeValue(val)) sizes.add(val);
+        if (isColor && isValidColorValue(val)) colors.add(val);
+      }
+    }
+    
+    // Find radiogroups
+    const radioGroups = area.querySelectorAll<HTMLElement>("[role='radiogroup'], fieldset");
+    for (const group of radioGroups) {
+      if (isInsideExcludedArea(group)) continue;
+      const label = inferLabelFor(group);
+      const isSize = /size|storlek|taille|größe|talla/i.test(label);
+      const isColor = /colo[u]?r|färg|couleur|farbe/i.test(label);
+      if (!isSize && !isColor) continue;
+      
+      const children = group.querySelectorAll<HTMLElement>("button, [role='radio'], label, li, a[data-value]");
+      for (const child of children) {
+        const dataValue = child.getAttribute("data-value")?.trim();
+        const ariaLabel = child.getAttribute("aria-label")?.trim();
+        const title = child.getAttribute("title")?.trim();
+        const text = (child.textContent || "").trim();
+        const val = dataValue || ariaLabel || title || text;
+        if (!val) continue;
+        if (isSize && isValidSizeValue(val)) sizes.add(val);
+        if (isColor && isValidColorValue(val)) colors.add(val);
+      }
+    }
+  }
+}
+
+/** Try to find a text label for a form element */
+function inferLabelFor(el: HTMLElement): string {
+  // aria-label
+  const aria = el.getAttribute("aria-label") || "";
+  if (aria) return aria;
+  
+  // legend inside fieldset
+  const legend = el.querySelector("legend");
+  if (legend) return legend.textContent || "";
+  
+  // Associated <label>
+  const id = el.id;
+  if (id) {
+    const label = document.querySelector<HTMLLabelElement>(`label[for="${id}"]`);
+    if (label) return label.textContent || "";
+  }
+  
+  // Previous sibling label or heading
+  const prev = el.previousElementSibling;
+  if (prev && (prev.tagName === "LABEL" || prev.tagName === "SPAN" || prev.tagName === "P" || prev.tagName === "H3" || prev.tagName === "H4")) {
+    return prev.textContent || "";
+  }
+  
+  // Parent's aria-label or data-testid
+  const parent = el.parentElement;
+  if (parent) {
+    const parentLabel = parent.getAttribute("aria-label") || parent.getAttribute("data-testid") || "";
+    if (parentLabel) return parentLabel;
+  }
+  
+  // name attribute for selects
+  return el.getAttribute("name") || "";
+}
+
 export function extractProduct(): ProductData {
   return {
     product_url: location.href,

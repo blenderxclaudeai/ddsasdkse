@@ -490,7 +490,9 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         }
 
         if (response?.ok) {
-          if (response.openedProductTab) {
+          if (response.addedToCart) {
+            setShareToast("Added to retailer cart!");
+          } else if (response.openedProductTab) {
             setShareToast("Opened retailer page and adding to cart…");
           } else {
             setShareToast("Added to retailer cart");

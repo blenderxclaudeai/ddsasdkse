@@ -221,13 +221,14 @@ function scrapePrice(): string | null {
     }
   }
 
-  // 4. CSS selectors — common price patterns on retailer sites
+  // 4. CSS selectors — common price patterns on retailer sites (restricted to product areas)
   const priceSelectors = [
     "[data-price]",
     "[data-testid*='price' i]",
     "[data-testid*='current-price' i]",
+    "[data-testid*='product'] [data-testid*='price']",
     "[data-qa*='price' i]",
-    "[id*='price' i]",
+    "[id*='price' i]:not(nav *, footer *, header *)",
     "[class*='product-price'] [class*='current']",
     "[class*='product-price'] [class*='sale']",
     "[class*='product-price']",
@@ -241,11 +242,14 @@ function scrapePrice(): string | null {
     "[class*='current-price']",
     "[class*='Price'] [class*='current']",
     "[class*='Price'] [class*='sale']",
-    "[class*='money']",
-    "[class*='amount']",
+    "[class*='money']:not(nav *, footer *, header *)",
+    "[class*='amount']:not(nav *, footer *, header *)",
     ".price .now",
     ".price-box .price",
     "[class*='price'] [class*='now']",
+    "main [class*='price' i]",
+    "article [class*='price' i]",
+    "[class*='product' i] [class*='price' i]",
     "[class*='price']",
   ];
 
@@ -424,18 +428,20 @@ export async function waitForVariantElements(timeoutMs = 3000): Promise<void> {
   const POLL_INTERVAL = 500;
   const deadline = Date.now() + timeoutMs;
 
+  // Only compound/specific selectors — no bare [class*='size' i] that match footer
   const variantSelectors = [
     "select[name*='size' i]", "select[id*='size' i]",
     "[class*='size' i][class*='selector' i]", "[class*='size' i][class*='option' i]",
     "[class*='size' i][class*='picker' i]", "[data-testid*='size' i]",
     "[role='radiogroup'][aria-label*='size' i]",
-    "[class*='size' i] button", "[class*='size' i] li", "[class*='size' i] a",
-    "[aria-label*='size' i] button",
     "select[name*='color' i]", "select[name*='colour' i]",
     "[class*='color' i][class*='selector' i]", "[class*='colour' i][class*='selector' i]",
     "[class*='color' i][class*='picker' i]", "[data-testid*='color' i]",
     "[role='radiogroup'][aria-label*='color' i]",
-    "[class*='color' i] button", "[class*='colour' i] button",
+    // Universal fallback: select/radiogroup/fieldset inside product areas
+    "main select", "article select", "form select",
+    "main [role='radiogroup']", "article [role='radiogroup']",
+    "main fieldset", "article fieldset",
   ];
 
   while (Date.now() < deadline) {
@@ -470,6 +476,11 @@ export function extractVariants(): ProductVariants {
   // 3. DOM: common color selectors
   if (colors.size === 0) {
     extractColorsFromDom(colors);
+  }
+
+  // 4. Universal fallback: find any select/radiogroup/fieldset inside product areas
+  if (sizes.size === 0 && colors.size === 0) {
+    extractUniversalFallback(sizes, colors);
   }
 
   return {
@@ -695,6 +706,86 @@ function extractColorsFromDom(colors: Set<string>): void {
     const val = dataValue || ariaLabel || title || (btn.textContent || "").trim();
     if (val && isValidColorValue(val)) colors.add(val);
   }
+}
+
+/** Universal fallback: scan select, radiogroup, fieldset inside product areas */
+function extractUniversalFallback(sizes: Set<string>, colors: Set<string>): void {
+  const productAreas = document.querySelectorAll<HTMLElement>(PRODUCT_AREA_SELECTORS);
+  
+  for (const area of productAreas) {
+    // Find selects
+    const selects = area.querySelectorAll<HTMLSelectElement>("select");
+    for (const sel of selects) {
+      if (isInsideExcludedArea(sel)) continue;
+      const label = inferLabelFor(sel);
+      const isSize = /size|storlek|taille|größe|talla/i.test(label);
+      const isColor = /colo[u]?r|färg|couleur|farbe/i.test(label);
+      if (!isSize && !isColor) continue;
+      
+      for (const opt of sel.options) {
+        const val = opt.text.trim();
+        if (!val || opt.disabled || /select|choose|pick|välj|wähle/i.test(val)) continue;
+        if (isSize && isValidSizeValue(val)) sizes.add(val);
+        if (isColor && isValidColorValue(val)) colors.add(val);
+      }
+    }
+    
+    // Find radiogroups
+    const radioGroups = area.querySelectorAll<HTMLElement>("[role='radiogroup'], fieldset");
+    for (const group of radioGroups) {
+      if (isInsideExcludedArea(group)) continue;
+      const label = inferLabelFor(group);
+      const isSize = /size|storlek|taille|größe|talla/i.test(label);
+      const isColor = /colo[u]?r|färg|couleur|farbe/i.test(label);
+      if (!isSize && !isColor) continue;
+      
+      const children = group.querySelectorAll<HTMLElement>("button, [role='radio'], label, li, a[data-value]");
+      for (const child of children) {
+        const dataValue = child.getAttribute("data-value")?.trim();
+        const ariaLabel = child.getAttribute("aria-label")?.trim();
+        const title = child.getAttribute("title")?.trim();
+        const text = (child.textContent || "").trim();
+        const val = dataValue || ariaLabel || title || text;
+        if (!val) continue;
+        if (isSize && isValidSizeValue(val)) sizes.add(val);
+        if (isColor && isValidColorValue(val)) colors.add(val);
+      }
+    }
+  }
+}
+
+/** Try to find a text label for a form element */
+function inferLabelFor(el: HTMLElement): string {
+  // aria-label
+  const aria = el.getAttribute("aria-label") || "";
+  if (aria) return aria;
+  
+  // legend inside fieldset
+  const legend = el.querySelector("legend");
+  if (legend) return legend.textContent || "";
+  
+  // Associated <label>
+  const id = el.id;
+  if (id) {
+    const label = document.querySelector<HTMLLabelElement>(`label[for="${id}"]`);
+    if (label) return label.textContent || "";
+  }
+  
+  // Previous sibling label or heading
+  const prev = el.previousElementSibling;
+  if (prev && (prev.tagName === "LABEL" || prev.tagName === "SPAN" || prev.tagName === "P" || prev.tagName === "H3" || prev.tagName === "H4")) {
+    return prev.textContent || "";
+  }
+  
+  // Parent's aria-label or data-testid
+  const parent = el.parentElement;
+  if (parent) {
+    const parentLabel = parent.getAttribute("aria-label") || parent.getAttribute("data-testid") || "";
+    if (parentLabel) return parentLabel;
+  }
+  
+  // name attribute for selects
+  return el.getAttribute("name") || "";
 }
 
 export function extractProduct(): ProductData {

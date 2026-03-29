@@ -8,7 +8,6 @@ function getMeta(property: string): string | null {
 }
 
 function scrapeImage(): string | null {
-  // 1. JSON-LD Product.image (highest priority — most reliable)
   const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
   for (const s of jsonLdScripts) {
     try {
@@ -18,13 +17,11 @@ function scrapeImage(): string | null {
     } catch { /* ignore */ }
   }
 
-  // 2. OpenGraph / Twitter meta
   const ogImage = getMeta("og:image");
   if (ogImage) return ogImage;
   const twImage = getMeta("twitter:image");
   if (twImage) return twImage;
 
-  // 3. Product-specific selectors
   const productSelectors = [
     "[class*='product-image'] img",
     "[class*='product-detail'] img",
@@ -37,7 +34,6 @@ function scrapeImage(): string | null {
     "[id*='product-image'] img",
     "[id*='product'] img:first-child",
     "main img[src]:first-of-type",
-    // Lazy-loaded image patterns
     "img[data-src]",
     "img[data-lazy-src]",
   ];
@@ -45,14 +41,11 @@ function scrapeImage(): string | null {
     try {
       const el = document.querySelector<HTMLImageElement>(sel);
       if (!el) continue;
-      // Check actual src first, then lazy-load attributes
       const imgSrc = el.src || el.dataset.src || el.dataset.lazySrc || el.getAttribute("data-lazy-src") || "";
       if (imgSrc && !imgSrc.startsWith("data:")) return imgSrc;
     } catch { /* skip */ }
   }
 
-  // 4. <picture> / <source srcset> parsing (including Ellos-style lazy-loaded)
-  // First try Ellos-specific media selectors
   const ellosImgs = document.querySelectorAll<HTMLImageElement>("[data-product-media] img, [class*='media'] picture img, [class*='product-media'] img");
   for (const img of ellosImgs) {
     const src = img.currentSrc || img.src || img.dataset.src || img.dataset.lazySrc || "";
@@ -61,9 +54,8 @@ function scrapeImage(): string | null {
 
   const pictures = document.querySelectorAll("picture");
   for (const pic of pictures) {
-    // Check if this picture is inside a product area — relaxed threshold
     const parent = pic.closest("[class*='product'], [class*='gallery'], [id*='product'], main, article, [class*='detail'], [class*='hero'], [class*='media']");
-    if (!parent && pictures.length > 8) continue; // skip non-product pictures only if very many on page
+    if (!parent && pictures.length > 8) continue;
     const sources = pic.querySelectorAll<HTMLSourceElement>("source[srcset]");
     for (const source of sources) {
       const srcset = source.getAttribute("srcset");
@@ -73,14 +65,11 @@ function scrapeImage(): string | null {
       }
     }
     const img = pic.querySelector<HTMLImageElement>("img");
-    // Check currentSrc first (reflects actually-loaded source for lazy images)
     if (img?.currentSrc && !img.currentSrc.startsWith("data:")) return img.currentSrc;
     if (img?.src && !img.src.startsWith("data:")) return img.src;
-    // Check data-src for lazy-loaded images in picture elements
     if (img?.dataset.src && !img.dataset.src.startsWith("data:")) return img.dataset.src;
   }
 
-  // 5. img with srcset attribute
   const imgWithSrcset = document.querySelector<HTMLImageElement>("img[srcset]");
   if (imgWithSrcset) {
     const url = parseSrcsetLargest(imgWithSrcset.getAttribute("srcset") || "");
@@ -88,7 +77,6 @@ function scrapeImage(): string | null {
     if (imgWithSrcset.src && !imgWithSrcset.src.startsWith("data:")) return imgWithSrcset.src;
   }
 
-  // 6. Largest image fallback (filtered) — including lazy-loaded
   let largest: HTMLImageElement | null = null;
   let largestArea = 0;
   let largestSrc = "";
@@ -96,7 +84,6 @@ function scrapeImage(): string | null {
     const w = img.naturalWidth || img.width;
     const h = img.naturalHeight || img.height;
     const area = w * h;
-    // Filter out logos/icons: too small or extreme aspect ratio
     if (w < 200 || h < 200) return;
     if (w / h > 3 || h / w > 3) return;
     const src = img.currentSrc || img.src || img.dataset.src || img.dataset.lazySrc || "";
@@ -109,7 +96,6 @@ function scrapeImage(): string | null {
   return largestSrc || null;
 }
 
-/** Extract the largest URL from a srcset attribute */
 function parseSrcsetLargest(srcset: string): string | null {
   const entries = srcset.split(",").map((s) => s.trim()).filter(Boolean);
   let bestUrl: string | null = null;
@@ -129,7 +115,6 @@ function parseSrcsetLargest(srcset: string): string | null {
   return bestUrl || (entries.length > 0 ? entries[entries.length - 1].split(/\s+/)[0] : null);
 }
 
-/** Extract image URL from JSON-LD Product data */
 function extractImageFromJsonLd(data: any): string | null {
   if (!data) return null;
   if (Array.isArray(data)) {
@@ -165,30 +150,19 @@ function scrapeTitle(): string {
   return getMeta("og:title") ?? getMeta("twitter:title") ?? document.title ?? "";
 }
 
-// ── Price extraction ──
-
-/** Extract a clean price string from raw text, e.g. "$49.99", "199 kr", "€29,90" */
 function cleanPrice(raw: string): string | null {
-  // Match common price patterns: $49.99, SEK 1 299, 1.299,00 kr, €29,90
   const match = raw.match(
     /(?:[\$€£¥₹]\s?\d[\d\s,.]*\d|\b(?:USD|EUR|SEK|NOK|DKK|GBP|CAD|AUD|CHF|JPY|INR|KR)\s?\d[\d\s,.]*\d|\d[\d\s,.]*\d\s?(?:kr|usd|eur|sek|nok|dkk|gbp|cad|aud|chf|jpy|inr))/i
   );
   if (match) return match[0].trim();
-
-  // Simpler: just a currency symbol followed by digits
   const simple = raw.match(/[\$€£¥₹]\s?\d+[.,]?\d{0,2}/);
   if (simple) return simple[0].trim();
-
-  // Digits with decimal/comma that look like prices
   const digits = raw.match(/\d[\d\s,.]*[.,]\d{2}/);
   if (digits) return digits[0].trim();
-
   return null;
 }
 
-/** Scrape price with priority chain: JSON-LD → Microdata → Meta → CSS selectors */
 function scrapePrice(): string | null {
-  // 1. JSON-LD
   const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
   for (const s of jsonLdScripts) {
     try {
@@ -198,7 +172,6 @@ function scrapePrice(): string | null {
     } catch { /* ignore */ }
   }
 
-  // 2. Microdata — [itemprop="price"]
   const priceEl = document.querySelector('[itemprop="price"]');
   if (priceEl) {
     const val =
@@ -212,7 +185,6 @@ function scrapePrice(): string | null {
     }
   }
 
-  // 3. Meta tags
   for (const prop of ["product:price:amount", "og:price:amount"]) {
     const amount = getMeta(prop);
     if (amount) {
@@ -221,7 +193,6 @@ function scrapePrice(): string | null {
     }
   }
 
-  // 4. CSS selectors — common price patterns on retailer sites (restricted to product areas)
   const priceSelectors = [
     "[data-price]",
     "[data-testid*='price' i]",
@@ -257,13 +228,11 @@ function scrapePrice(): string | null {
     try {
       const el = document.querySelector<HTMLElement>(sel);
       if (el) {
-        // Check data-price attribute first
         const dataPrice = el.getAttribute("data-price");
         if (dataPrice) {
           const cleaned = cleanPrice(dataPrice);
           if (cleaned) return cleaned;
         }
-
         const text = el.textContent?.trim();
         if (text) {
           const cleaned = cleanPrice(text);
@@ -273,7 +242,6 @@ function scrapePrice(): string | null {
     } catch { /* invalid selector, skip */ }
   }
 
-  // 5. Broad attribute fallback (for modern component-based storefronts)
   const fallbackNodes = document.querySelectorAll<HTMLElement>(
     "[data-price], [data-testid*='price' i], [aria-label*='price' i], [class*='price' i], [id*='price' i], [class*='money' i], [class*='amount' i]"
   );
@@ -290,7 +258,6 @@ function scrapePrice(): string | null {
     if (cleaned) return cleaned;
   }
 
-  // 6. aria-label scanning on any element
   const ariaNodes = document.querySelectorAll<HTMLElement>("[aria-label]");
   for (const node of Array.from(ariaNodes).slice(0, 60)) {
     const label = node.getAttribute("aria-label") || "";
@@ -305,12 +272,11 @@ function scrapePrice(): string | null {
     }
   }
 
-  // 7. Short text nodes matching price regex (role="text" or small elements)
   const shortTextNodes = document.querySelectorAll<HTMLElement>("span, p, div");
   for (const node of Array.from(shortTextNodes).slice(0, 200)) {
     const text = node.textContent?.trim();
     if (!text || text.length > 30 || text.length < 3) continue;
-    if (node.children.length > 2) continue; // skip containers
+    if (node.children.length > 2) continue;
     const cleaned = cleanPrice(text);
     if (cleaned) return cleaned;
   }
@@ -318,19 +284,14 @@ function scrapePrice(): string | null {
   return null;
 }
 
-/** Recursively extract price from JSON-LD data (handles @graph, arrays, nested offers) */
 function extractPriceFromJsonLd(data: any): string | null {
   if (!data) return null;
-
-  // Handle @graph arrays
   if (data["@graph"]) {
     for (const item of Array.isArray(data["@graph"]) ? data["@graph"] : [data["@graph"]]) {
       const p = extractPriceFromJsonLd(item);
       if (p) return p;
     }
   }
-
-  // Handle arrays
   if (Array.isArray(data)) {
     for (const item of data) {
       const p = extractPriceFromJsonLd(item);
@@ -338,13 +299,8 @@ function extractPriceFromJsonLd(data: any): string | null {
     }
     return null;
   }
-
-  // Check if this is a Product type
   const type = data["@type"];
-  const isProduct =
-    type === "Product" ||
-    (Array.isArray(type) && type.includes("Product"));
-
+  const isProduct = type === "Product" || (Array.isArray(type) && type.includes("Product"));
   if (isProduct && data.offers) {
     const offers = Array.isArray(data.offers) ? data.offers : [data.offers];
     for (const offer of offers) {
@@ -356,11 +312,9 @@ function extractPriceFromJsonLd(data: any): string | null {
       }
     }
   }
-
   return null;
 }
 
-/** Detect product category from page signals */
 function detectCategory(): string | undefined {
   const text = (
     (getMeta("og:title") ?? "") +
@@ -372,7 +326,6 @@ function detectCategory(): string | undefined {
     (getMeta("description") ?? "")
   ).toLowerCase();
 
-  // Check JSON-LD for product category hints
   const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
   let jsonLdText = "";
   jsonLdScripts.forEach((s) => {
@@ -383,7 +336,6 @@ function detectCategory(): string | undefined {
     } catch { /* ignore */ }
   });
 
-  // Scrape breadcrumbs for extra category signals
   const breadcrumbs = document.querySelectorAll(
     '[class*="breadcrumb"] a, nav[aria-label*="bread"] a, nav[aria-label*="Bread"] a, ol li a'
   );
@@ -428,7 +380,6 @@ export async function waitForVariantElements(timeoutMs = 3000): Promise<void> {
   const POLL_INTERVAL = 500;
   const deadline = Date.now() + timeoutMs;
 
-  // Only compound/specific selectors — no bare [class*='size' i] that match footer
   const variantSelectors = [
     "select[name*='size' i]", "select[id*='size' i]",
     "[class*='size' i][class*='selector' i]", "[class*='size' i][class*='option' i]",
@@ -468,19 +419,20 @@ export function extractVariants(): ProductVariants {
     } catch { /* ignore */ }
   }
 
-  // 2. DOM: common size selectors
+  // 2. Universal heuristic (PRIMARY strategy — scans all interactive groups by label)
+  // Run this BEFORE the specific DOM selectors so it catches non-standard stores
+  if (sizes.size === 0 && colors.size === 0) {
+    extractUniversalFallback(sizes, colors);
+  }
+
+  // 3. DOM: specific size selectors (supplement if universal didn't find sizes)
   if (sizes.size === 0) {
     extractSizesFromDom(sizes);
   }
 
-  // 3. DOM: common color selectors
+  // 4. DOM: specific color selectors (supplement if universal didn't find colors)
   if (colors.size === 0) {
     extractColorsFromDom(colors);
-  }
-
-  // 4. Universal fallback: find any select/radiogroup/fieldset inside product areas
-  if (sizes.size === 0 && colors.size === 0) {
-    extractUniversalFallback(sizes, colors);
   }
 
   return {
@@ -509,13 +461,11 @@ function extractVariantsFromJsonLd(data: any, sizes: Set<string>, colors: Set<st
 
   if (!isProduct) return;
 
-  // Check hasVariant (schema.org ProductGroup pattern)
   if (data.hasVariant) {
     const variants = Array.isArray(data.hasVariant) ? data.hasVariant : [data.hasVariant];
     for (const v of variants) {
       if (v.size) sizes.add(String(v.size).trim());
       if (v.color) colors.add(String(v.color).trim());
-      // additionalProperty pattern
       if (v.additionalProperty) {
         const props = Array.isArray(v.additionalProperty) ? v.additionalProperty : [v.additionalProperty];
         for (const p of props) {
@@ -529,13 +479,11 @@ function extractVariantsFromJsonLd(data: any, sizes: Set<string>, colors: Set<st
     }
   }
 
-  // Check offers for variant info
   if (data.offers) {
     const offers = Array.isArray(data.offers) ? data.offers : [data.offers];
     for (const offer of offers) {
       if (offer.size) sizes.add(String(offer.size).trim());
       if (offer.color) colors.add(String(offer.color).trim());
-      // itemOffered may contain variant info
       if (offer.itemOffered) {
         const item = offer.itemOffered;
         if (item.size) sizes.add(String(item.size).trim());
@@ -544,7 +492,6 @@ function extractVariantsFromJsonLd(data: any, sizes: Set<string>, colors: Set<st
     }
   }
 
-  // Direct size/color on Product
   if (data.size) {
     const s = Array.isArray(data.size) ? data.size : [data.size];
     s.forEach((v: any) => sizes.add(String(v).trim()));
@@ -554,7 +501,6 @@ function extractVariantsFromJsonLd(data: any, sizes: Set<string>, colors: Set<st
     c.forEach((v: any) => colors.add(String(v).trim()));
   }
 
-  // additionalProperty on Product level
   if (data.additionalProperty) {
     const props = Array.isArray(data.additionalProperty) ? data.additionalProperty : [data.additionalProperty];
     for (const p of props) {
@@ -567,7 +513,7 @@ function extractVariantsFromJsonLd(data: any, sizes: Set<string>, colors: Set<st
   }
 }
 
-// Blocklist: skip elements whose text matches these patterns (legal, policy, footer text)
+// Blocklist: skip elements whose text matches these patterns
 const VARIANT_TEXT_BLOCKLIST = /försäljning|villkor|leverans|retur|policy|guide|reviews|faq|kundtjänst|storleksguide|care|details|cookie|shipping|terms|integritet|privacy|conditions|copyright|nyhetsbrev|newsletter|kundservice|customer service|kontakt|contact|om oss|about us/i;
 
 // Elements inside these ancestors are never variant containers
@@ -612,7 +558,6 @@ const COLOR_SELECTORS = [
 ];
 
 function extractSizesFromDom(sizes: Set<string>): void {
-  // Select dropdowns (these are specific enough — no area restriction needed)
   for (const sel of SIZE_SELECTORS) {
     const elems = document.querySelectorAll<HTMLSelectElement>(sel);
     for (const select of elems) {
@@ -627,7 +572,6 @@ function extractSizesFromDom(sizes: Set<string>): void {
     }
   }
 
-  // Button/radio groups — only compound selectors (removed bare [class*='size' i])
   const sizeContainers = document.querySelectorAll<HTMLElement>(
     "[class*='size' i][class*='selector' i], [class*='size' i][class*='option' i], [class*='size' i][class*='picker' i], [class*='size' i][class*='list' i], [data-testid*='size' i], fieldset[class*='size' i], [role='radiogroup'][aria-label*='size' i]"
   );
@@ -646,7 +590,6 @@ function extractSizesFromDom(sizes: Set<string>): void {
     if (sizes.size > 0) return;
   }
 
-  // Broad fallback: buttons with aria-label containing "size" — within product area
   const sizeButtons = document.querySelectorAll<HTMLElement>("[aria-label*='size' i] button, button[aria-label*='size' i]");
   for (const btn of sizeButtons) {
     if (isInsideExcludedArea(btn)) continue;
@@ -659,7 +602,6 @@ function extractSizesFromDom(sizes: Set<string>): void {
 }
 
 function extractColorsFromDom(colors: Set<string>): void {
-  // Select dropdowns
   for (const sel of COLOR_SELECTORS) {
     const elems = document.querySelectorAll<HTMLSelectElement>(sel);
     for (const select of elems) {
@@ -674,7 +616,6 @@ function extractColorsFromDom(colors: Set<string>): void {
     }
   }
 
-  // Button/radio groups — only compound selectors (removed bare [class*='color' i] and [class*='colour' i])
   const colorContainers = document.querySelectorAll<HTMLElement>(
     "[class*='color' i][class*='selector' i], [class*='color' i][class*='option' i], [class*='colour' i][class*='selector' i], [class*='colour' i][class*='option' i], [class*='color' i][class*='picker' i], [class*='color' i][class*='swatch' i], [data-testid*='color' i], [data-testid*='colour' i], fieldset[class*='color' i], [role='radiogroup'][aria-label*='color' i]"
   );
@@ -695,7 +636,6 @@ function extractColorsFromDom(colors: Set<string>): void {
     if (colors.size > 0) return;
   }
 
-  // Broad fallback: buttons with aria-label — within product area
   const colorButtons = document.querySelectorAll<HTMLElement>("[aria-label*='color' i] button, [aria-label*='colour' i] button, button[aria-label*='color' i], button[aria-label*='colour' i]");
   for (const btn of colorButtons) {
     if (isInsideExcludedArea(btn)) continue;
@@ -708,7 +648,11 @@ function extractColorsFromDom(colors: Set<string>): void {
   }
 }
 
-/** Universal fallback: scan select, radiogroup, fieldset inside product areas */
+// Expanded size/color label keywords for multi-language support
+const SIZE_LABEL_RE = /size|storlek|taille|größe|grösse|talla|maat|rozmiar|dimensione|tamanho|サイズ/i;
+const COLOR_LABEL_RE = /colo[u]?r|färg|couleur|farbe|kleur|kolor|colore|cor|色|カラー/i;
+
+/** Universal fallback: scan select, radiogroup, fieldset, button groups inside product areas */
 function extractUniversalFallback(sizes: Set<string>, colors: Set<string>): void {
   const productAreas = document.querySelectorAll<HTMLElement>(PRODUCT_AREA_SELECTORS);
   
@@ -718,8 +662,8 @@ function extractUniversalFallback(sizes: Set<string>, colors: Set<string>): void
     for (const sel of selects) {
       if (isInsideExcludedArea(sel)) continue;
       const label = inferLabelFor(sel);
-      const isSize = /size|storlek|taille|größe|talla/i.test(label);
-      const isColor = /colo[u]?r|färg|couleur|farbe/i.test(label);
+      const isSize = SIZE_LABEL_RE.test(label);
+      const isColor = COLOR_LABEL_RE.test(label);
       if (!isSize && !isColor) continue;
       
       for (const opt of sel.options) {
@@ -730,13 +674,13 @@ function extractUniversalFallback(sizes: Set<string>, colors: Set<string>): void
       }
     }
     
-    // Find radiogroups
+    // Find radiogroups and fieldsets
     const radioGroups = area.querySelectorAll<HTMLElement>("[role='radiogroup'], fieldset");
     for (const group of radioGroups) {
       if (isInsideExcludedArea(group)) continue;
       const label = inferLabelFor(group);
-      const isSize = /size|storlek|taille|größe|talla/i.test(label);
-      const isColor = /colo[u]?r|färg|couleur|farbe/i.test(label);
+      const isSize = SIZE_LABEL_RE.test(label);
+      const isColor = COLOR_LABEL_RE.test(label);
       if (!isSize && !isColor) continue;
       
       const children = group.querySelectorAll<HTMLElement>("button, [role='radio'], label, li, a[data-value]");
@@ -751,14 +695,47 @@ function extractUniversalFallback(sizes: Set<string>, colors: Set<string>): void
         if (isColor && isValidColorValue(val)) colors.add(val);
       }
     }
+
+    // Find div/section containers with button groups (common in modern SPAs)
+    const buttonGroups = area.querySelectorAll<HTMLElement>("div, section, ul");
+    for (const group of buttonGroups) {
+      if (isInsideExcludedArea(group)) continue;
+      // Only consider groups that have 2+ interactive children and a detectable label
+      const buttons = group.querySelectorAll<HTMLElement>(":scope > button, :scope > a[data-value], :scope > label, :scope > li > button, :scope > li > a");
+      if (buttons.length < 2 || buttons.length > 30) continue;
+      
+      const label = inferLabelFor(group);
+      if (!label) continue;
+      const isSize = SIZE_LABEL_RE.test(label);
+      const isColor = COLOR_LABEL_RE.test(label);
+      if (!isSize && !isColor) continue;
+      
+      for (const btn of buttons) {
+        const dataValue = btn.getAttribute("data-value")?.trim();
+        const ariaLabel = btn.getAttribute("aria-label")?.trim();
+        const title = btn.getAttribute("title")?.trim();
+        const text = (btn.textContent || "").trim();
+        const val = dataValue || ariaLabel || title || text;
+        if (!val) continue;
+        if (isSize && isValidSizeValue(val)) sizes.add(val);
+        if (isColor && isValidColorValue(val)) colors.add(val);
+      }
+    }
   }
 }
 
-/** Try to find a text label for a form element */
+/** Try to find a text label for a form element — expanded heuristics */
 function inferLabelFor(el: HTMLElement): string {
-  // aria-label
+  // aria-label on element itself
   const aria = el.getAttribute("aria-label") || "";
   if (aria) return aria;
+  
+  // aria-labelledby
+  const labelledBy = el.getAttribute("aria-labelledby");
+  if (labelledBy) {
+    const labelEl = document.getElementById(labelledBy);
+    if (labelEl) return labelEl.textContent || "";
+  }
   
   // legend inside fieldset
   const legend = el.querySelector("legend");
@@ -771,21 +748,88 @@ function inferLabelFor(el: HTMLElement): string {
     if (label) return label.textContent || "";
   }
   
-  // Previous sibling label or heading
+  // data-testid containing size/color keywords
+  const testId = el.getAttribute("data-testid") || "";
+  if (testId) return testId;
+  
+  // Previous sibling: label, heading, span, p
   const prev = el.previousElementSibling;
-  if (prev && (prev.tagName === "LABEL" || prev.tagName === "SPAN" || prev.tagName === "P" || prev.tagName === "H3" || prev.tagName === "H4")) {
-    return prev.textContent || "";
+  if (prev && /^(LABEL|SPAN|P|H1|H2|H3|H4|H5|H6|LEGEND|STRONG)$/.test(prev.tagName)) {
+    const text = prev.textContent || "";
+    if (text.length < 40) return text;
   }
   
-  // Parent's aria-label or data-testid
+  // Check parent's data-testid, aria-label
   const parent = el.parentElement;
   if (parent) {
     const parentLabel = parent.getAttribute("aria-label") || parent.getAttribute("data-testid") || "";
     if (parentLabel) return parentLabel;
+    
+    // Check parent's previous sibling (heading above the container)
+    const parentPrev = parent.previousElementSibling;
+    if (parentPrev && /^(LABEL|SPAN|P|H1|H2|H3|H4|H5|H6|LEGEND|STRONG)$/.test(parentPrev.tagName)) {
+      const text = parentPrev.textContent || "";
+      if (text.length < 40) return text;
+    }
   }
+  
+  // Grandparent label check (for deeply nested components)
+  const grandparent = parent?.parentElement;
+  if (grandparent) {
+    const gpLabel = grandparent.getAttribute("aria-label") || grandparent.getAttribute("data-testid") || "";
+    if (gpLabel) return gpLabel;
+    
+    const gpPrev = grandparent.previousElementSibling;
+    if (gpPrev && /^(LABEL|SPAN|P|H1|H2|H3|H4|H5|H6|LEGEND|STRONG)$/.test(gpPrev.tagName)) {
+      const text = gpPrev.textContent || "";
+      if (text.length < 40) return text;
+    }
+  }
+  
+  // Closest heading within reasonable distance
+  const closestHeading = findClosestHeading(el);
+  if (closestHeading) return closestHeading;
   
   // name attribute for selects
   return el.getAttribute("name") || "";
+}
+
+/** Walk up the DOM to find the nearest heading (h1-h6) or bold span near the element */
+function findClosestHeading(el: HTMLElement): string {
+  let current: HTMLElement | null = el;
+  let depth = 0;
+  while (current && depth < 5) {
+    // Check previous siblings for headings
+    let sib = current.previousElementSibling;
+    let sibCount = 0;
+    while (sib && sibCount < 3) {
+      if (/^(H[1-6]|LABEL|LEGEND)$/.test(sib.tagName)) {
+        const text = (sib.textContent || "").trim();
+        if (text.length < 40) return text;
+      }
+      // Check for bold/strong spans that act as labels
+      if (sib.tagName === "SPAN" || sib.tagName === "DIV" || sib.tagName === "P") {
+        const strong = sib.querySelector("strong, b");
+        if (strong) {
+          const text = (strong.textContent || "").trim();
+          if (text.length < 40) return text;
+        }
+        // Check font-weight
+        try {
+          const style = getComputedStyle(sib);
+          if (parseInt(style.fontWeight) >= 500 || style.fontWeight === "bold") {
+            const text = (sib.textContent || "").trim();
+            if (text.length < 40) return text;
+          }
+        } catch { /* skip */ }
+      }
+      sib = sib.previousElementSibling;
+      sibCount++;
+    }
+    current = current.parentElement;
+    depth++;
+  }
+  return "";
 }
 
 export function extractProduct(): ProductData {

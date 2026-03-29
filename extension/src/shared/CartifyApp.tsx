@@ -490,7 +490,9 @@ export function CartifyApp({ mode }: CartifyAppProps) {
         }
 
         if (response?.ok) {
-          if (response.openedProductTab) {
+          if (response.addedToCart) {
+            setShareToast("Added to retailer cart!");
+          } else if (response.openedProductTab) {
             setShareToast("Opened retailer page and adding to cart…");
           } else {
             setShareToast("Added to retailer cart");
@@ -578,40 +580,40 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     setExtractedVariants({});
     setVariantFlowIndex(0);
     setVariantFlow(currentCartItems);
-    // Fetch variants for first item
+    // Trigger combined variant-extraction + add-to-cart for first item
     fetchVariantsForItem(currentCartItems[0]);
   };
 
   const fetchVariantsForItem = async (item: SessionItem) => {
     if (extractedVariants[item.id]) return; // already fetched
 
-    // Check for pre-stored variants first (extracted at add-to-cart time)
-    const key = `cartify_variants_${btoa(item.product_url).slice(0, 40)}`;
-    const stored = await chrome.storage.local.get(key);
-    if (stored[key] && (stored[key].sizes?.length || stored[key].colors?.length)) {
-      setExtractedVariants((prev) => ({
-        ...prev,
-        [item.id]: {
-          sizes: stored[key].sizes || [],
-          colors: stored[key].colors || [],
-        },
-      }));
-      return;
-    }
-
-    // Fallback: extract via background tab
     setVariantsLoading(true);
+    // Use the unified flow: CARTIFY_ADD_TO_RETAILER_CART will either:
+    // 1. Return needsVariantSelection + variants (if variants found)
+    // 2. Open tab and add to cart directly (if no variants)
     chrome.runtime.sendMessage(
-      { type: "CARTIFY_EXTRACT_VARIANTS", payload: { product_url: item.product_url } },
+      {
+        type: "CARTIFY_ADD_TO_RETAILER_CART",
+        payload: {
+          product_url: item.product_url,
+          retailer_domain: item.retailer_domain || undefined,
+        },
+      },
       (response) => {
         setVariantsLoading(false);
-        if (response?.ok && response.variants) {
+        if (response?.ok && response.needsVariantSelection && response.variants) {
           setExtractedVariants((prev) => ({
             ...prev,
             [item.id]: {
               sizes: response.variants.sizes || [],
               colors: response.variants.colors || [],
             },
+          }));
+        } else if (response?.ok && (response.openedProductTab || response.addedToCart)) {
+          // No variants — item is being added directly, mark as done and move to next
+          setExtractedVariants((prev) => ({
+            ...prev,
+            [item.id]: { sizes: [], colors: [] },
           }));
         }
       }
@@ -620,62 +622,50 @@ export function CartifyApp({ mode }: CartifyAppProps) {
 
   const handleVariantNext = () => {
     if (!variantFlow) return;
+    const currentItem = variantFlow[variantFlowIndex];
+    const sel = variantSelections[currentItem.id];
+
+    // If user selected variants, send the add-to-cart with variant selection
+    if (sel && (sel.size || sel.color)) {
+      chrome.runtime.sendMessage(
+        {
+          type: "CARTIFY_ADD_TO_RETAILER_CART",
+          payload: {
+            product_url: currentItem.product_url,
+            retailer_domain: currentItem.retailer_domain || undefined,
+            variant: sel,
+          },
+        },
+        (response) => {
+          if (response?.ok) {
+            setShareToast("Added to retailer cart!");
+            setTimeout(() => setShareToast(null), 2000);
+          }
+          advanceVariantFlow();
+        }
+      );
+    } else {
+      // No variants selected — item was already handled or has no variants
+      advanceVariantFlow();
+    }
+  };
+
+  const advanceVariantFlow = () => {
+    if (!variantFlow) return;
     if (variantFlowIndex < variantFlow.length - 1) {
       const nextIdx = variantFlowIndex + 1;
       setVariantFlowIndex(nextIdx);
       fetchVariantsForItem(variantFlow[nextIdx]);
     } else {
-      executeAddAllToRetailerCart();
+      // All done
+      const items = variantFlow;
+      setVariantFlow(null);
+      clearCartAfterAdd(items);
     }
   };
 
   const handleVariantSkip = () => {
-    // Kept for backwards compat but no longer used in UI
-    handleVariantNext();
-  };
-
-  const executeAddAllToRetailerCart = () => {
-    if (!variantFlow) return;
-    const items = variantFlow;
-    setVariantFlow(null);
-
-    const groups: Record<string, SessionItem[]> = {};
-    items.forEach((item) => {
-      const domain = item.retailer_domain || "unknown";
-      if (!groups[domain]) groups[domain] = [];
-      groups[domain].push(item);
-    });
-
-    const storeCount = Object.keys(groups).length;
-    setShareToast(`Adding to ${storeCount} store${storeCount !== 1 ? "s" : ""}…`);
-
-    const allItems = Object.values(groups).flat();
-    let idx = 0;
-
-    const sendNext = () => {
-      if (idx >= allItems.length) {
-        // All items sent — clear cart items from session
-        clearCartAfterAdd(allItems);
-        return;
-      }
-      const item = allItems[idx];
-      const variant = variantSelections[item.id];
-      chrome.runtime.sendMessage(
-        {
-          type: "CARTIFY_ADD_TO_RETAILER_CART",
-          payload: {
-            product_url: item.product_url,
-            retailer_domain: item.retailer_domain || undefined,
-            variant: variant && (variant.size || variant.color) ? variant : undefined,
-          },
-        },
-        () => {
-          idx++;
-          setTimeout(sendNext, 500);
-        }
-      );
-    };
-    sendNext();
+    advanceVariantFlow();
   };
 
   const clearCartAfterAdd = async (addedItems: SessionItem[]) => {

@@ -45,37 +45,10 @@ export interface TryOnMessage {
   background?: boolean;
 }
 
-export interface AddToCartMessage {
-  type: "CARTIFY_ADD_TO_CART";
-  payload: ProductData;
-}
-
-export interface SaveProductMessage {
-  type: "CARTIFY_SAVE_PRODUCT";
-  payload: ProductData;
-}
-
-export interface AddToRetailerCartMessage {
-  type: "CARTIFY_ADD_TO_RETAILER_CART";
-  payload: {
-    product_url: string;
-    retailer_domain?: string;
-  };
-}
-
-export interface CheckCouponsMessage {
-  type: "CARTIFY_CHECK_COUPONS";
-  domain: string;
-}
-
 export type ExtensionMessage =
   | AuthLoginMessage
   | AuthLogoutMessage
   | AuthGetUserMessage
   | AuthRefreshMessage
   | ProductDetectedMessage
-  | TryOnMessage
-  | AddToCartMessage
-  | AddToRetailerCartMessage
-  | SaveProductMessage
-  | CheckCouponsMessage;
+  | TryOnMessage;

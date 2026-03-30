@@ -1,4 +1,4 @@
-import { extractProduct, extractVariants, waitForVariantElements, type ProductVariants } from "./productExtract";
+import { extractProduct } from "./productExtract";
 import { isListingPage, findCardContainers, extractFromCard, extractFallbackFromLink } from "./productGrid";
 import {
   injectButton,
@@ -12,8 +12,6 @@ import {
   setCardButtonState,
   removeAllCardButtons,
   showToastNotification,
-  injectCartButton,
-  setCartButtonDone,
 } from "./ui";
 
 /** Check if the current page looks like a product/shopping page */
@@ -70,27 +68,7 @@ function storeDetectedProduct() {
   }
 }
 
-/** Pre-extract variants on product pages and store them for later use */
-function preExtractAndStoreVariants() {
-  // Wait a bit for SPA hydration before extracting
-  setTimeout(() => {
-    waitForVariantElements(5000).then(() => {
-      try {
-        const variants = extractVariants();
-        if (variants && (variants.sizes?.length || variants.colors?.length)) {
-          const productUrl = location.href;
-          chrome.runtime.sendMessage({
-            type: "CARTIFY_STORE_VARIANTS",
-            payload: { product_url: productUrl, variants },
-          }, () => { /* stored */ });
-          console.log("[Cartify] Pre-extracted variants:", variants);
-        }
-      } catch { /* ignore */ }
-    });
-  }, 2000);
-}
-
-// ── Listing page: card button handling ──
+// ── Listing page: card button handling (try-on only) ──
 
 const injectedCards = new WeakSet<HTMLElement>();
 let listingObserver: IntersectionObserver | null = null;
@@ -121,51 +99,15 @@ function setupListingButtons() {
 }
 
 function injectCardButtonOnCard(card: HTMLElement) {
-  const btn = injectCardButton(card, () => handleCardClick(card, btn));
-  // Also inject cart button
-  const cartBtn = injectCartButton(card, () => handleCartClick(card, cartBtn));
+  injectCardButton(card, () => handleCardClick(card));
 }
 
-function handleCartClick(card: HTMLElement, btn: HTMLElement) {
-  const product = extractFromCard(card);
-  const payload = product || {
-    product_url: extractFallbackFromLink(card) || "",
-    product_title: "",
-    product_image: "",
-  };
-  if (!payload.product_url) {
-    showToastNotification("Could not identify product", "error");
-    return;
-  }
+function handleCardClick(card: HTMLElement) {
+  const btn = card.querySelector("[data-cartify-card-btn]") as HTMLElement | null;
+  if (!btn || btn.dataset.state === "loading") return;
 
-  // DON'T extract variants on listing pages — there are no variant selectors here.
-  // Variants will be pre-extracted when user visits the product page, or
-  // fetched via foreground tab fallback during the variant selection flow.
+  if (btn) setCardButtonState(btn, "loading");
 
-  chrome.runtime.sendMessage(
-    { type: "CARTIFY_ADD_TO_CART", payload },
-    (response) => {
-      if (chrome.runtime.lastError) {
-        showToastNotification("Extension error", "error");
-        return;
-      }
-      if (response?.ok) {
-        setCartButtonDone(btn);
-        showToastNotification("Added to cart!");
-      } else {
-        showToastNotification(response?.error || "Sign in to add to cart", "error");
-      }
-    }
-  );
-}
-
-function handleCardClick(card: HTMLElement, btn: HTMLElement) {
-  // Prevent double-click while loading
-  if (btn.dataset.state === "loading") return;
-
-  setCardButtonState(btn, "loading");
-
-  // Extract product data on click only
   const product = extractFromCard(card);
 
   if (product) {
@@ -173,26 +115,20 @@ function handleCardClick(card: HTMLElement, btn: HTMLElement) {
       { type: "CARTIFY_TRYON_REQUEST", payload: product, background: true },
       (response) => {
         if (chrome.runtime.lastError) {
-          setCardButtonState(btn, "error");
+          if (btn) setCardButtonState(btn, "error");
           showToastNotification("Extension error", "error");
           return;
         }
         if (response?.ok) {
-          if (response.duplicate) {
-            setCardButtonState(btn, "done");
-            showToastNotification("Already queued!");
-          } else {
-            setCardButtonState(btn, "done");
-            showToastNotification("Try-on queued!");
-          }
+          if (btn) setCardButtonState(btn, "done");
+          showToastNotification(response.duplicate ? "Already queued!" : "Try-on queued!");
         } else {
-          setCardButtonState(btn, "error");
+          if (btn) setCardButtonState(btn, "error");
           showToastNotification(response?.error || "Request failed", "error");
         }
       }
     );
   } else {
-    // Fallback: try to get product page URL
     const fallbackUrl = extractFallbackFromLink(card);
     if (fallbackUrl) {
       chrome.runtime.sendMessage(
@@ -207,21 +143,21 @@ function handleCardClick(card: HTMLElement, btn: HTMLElement) {
         },
         (response) => {
           if (chrome.runtime.lastError) {
-            setCardButtonState(btn, "error");
+            if (btn) setCardButtonState(btn, "error");
             showToastNotification("Extension error", "error");
             return;
           }
           if (response?.ok) {
-            setCardButtonState(btn, "done");
+            if (btn) setCardButtonState(btn, "done");
             showToastNotification("Try-on queued!");
           } else {
-            setCardButtonState(btn, "error");
+            if (btn) setCardButtonState(btn, "error");
             showToastNotification(response?.error || "Could not extract product", "error");
           }
         }
       );
     } else {
-      setCardButtonState(btn, "error");
+      if (btn) setCardButtonState(btn, "error");
       showToastNotification("Could not identify product", "error");
     }
   }
@@ -258,26 +194,19 @@ function evaluatePage() {
 
     const loggedIn = response?.loggedIn;
 
-    // Check coupons after auth is resolved (prevents racing with token refresh)
-    const domain = location.hostname.replace(/^www\./, "");
-    chrome.runtime.sendMessage({ type: "CARTIFY_CHECK_COUPONS", domain }, () => {});
-
-    // Product page: detect product for side panel, no floating button
+    // Product page: detect product for side panel
     if (productPage && !listingPage) {
       if (loggedIn) {
         removeLoginPill();
         removeAllCardButtons();
         storeDetectedProduct();
-        // Pre-extract variants NOW while user is on the product page
-        preExtractAndStoreVariants();
-        // No floating "Try On" button — side panel handles it
       } else {
         injectLoginPill();
       }
       return;
     }
 
-    // Listing page: inline card buttons
+    // Listing page: inline try-on card buttons
     if (listingPage && !productPage) {
       document.getElementById("cartify-tryon-btn")?.remove();
       if (loggedIn) {
@@ -295,8 +224,6 @@ function evaluatePage() {
       if (loggedIn) {
         removeLoginPill();
         storeDetectedProduct();
-        // No floating "Try On" button — side panel handles it
-        // Also inject card buttons on any product grids (e.g. "related products")
         setupListingButtons();
       } else {
         document.getElementById("cartify-tryon-btn")?.remove();
@@ -307,7 +234,6 @@ function evaluatePage() {
 }
 
 (() => {
-  // Coupon check moved inside evaluatePage() to avoid racing with auth state
   setTimeout(evaluatePage, 500);
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -332,7 +258,6 @@ function evaluatePage() {
       }
       setTimeout(evaluatePage, 800);
     } else {
-      // Throttle rescan to max once per second
       const now = Date.now();
       if (now - lastRescanTime > 1000) {
         lastRescanTime = now;
@@ -341,136 +266,6 @@ function evaluatePage() {
     }
   }).observe(document.body, { childList: true, subtree: true });
 })();
-
-const RETAILER_CART_SELECTORS = [
-  "button[data-testid*='add-to-cart' i]",
-  "button[name*='add'][name*='cart' i]",
-  "button[id*='add'][id*='cart' i]",
-  "button[class*='add'][class*='cart' i]",
-  "button[aria-label*='add to cart' i]",
-  "button[aria-label*='add to bag' i]",
-  "button[aria-label*='add to basket' i]",
-  "form[action*='/cart' i] button[type='submit']",
-  "form[action*='/bag' i] button[type='submit']",
-  "input[type='submit']",
-  "button[type='submit']",
-  "button",
-  "a[role='button']",
-];
-
-const RETAILER_CART_TEXT_RE = /add to (cart|bag|basket)|lägg i varukorg|in den warenkorb|ajouter au panier|zum warenkorb|añadir al carrito/i;
-
-function isEligibleCartButton(el: HTMLElement): boolean {
-  if ((el as HTMLButtonElement).disabled) return false;
-  if (el.getAttribute("aria-disabled") === "true") return false;
-
-  const rect = el.getBoundingClientRect();
-  if (rect.width < 24 || rect.height < 24) return false;
-
-  const style = getComputedStyle(el);
-  if (style.visibility === "hidden" || style.display === "none") return false;
-
-  return true;
-}
-
-function looksLikeCartAction(el: HTMLElement): boolean {
-  const text = [el.textContent || "", el.getAttribute("aria-label") || "", el.getAttribute("title") || ""]
-    .join(" ")
-    .trim()
-    .toLowerCase();
-  return RETAILER_CART_TEXT_RE.test(text);
-}
-
-function findRetailerCartAction(): HTMLElement | null {
-  for (const selector of RETAILER_CART_SELECTORS) {
-    const elements = document.querySelectorAll<HTMLElement>(selector);
-    for (const el of elements) {
-      if (!isEligibleCartButton(el)) continue;
-      if (looksLikeCartAction(el)) return el;
-    }
-  }
-  return null;
-}
-
-function trySelectVariant(variant: { size?: string; color?: string }): void {
-  if (!variant) return;
-
-  const tryMatch = (value: string) => {
-    if (!value) return;
-    const lower = value.trim().toLowerCase();
-
-    // Try select dropdowns
-    const selects = document.querySelectorAll<HTMLSelectElement>("select");
-    for (const sel of selects) {
-      for (const opt of sel.options) {
-        if (opt.text.trim().toLowerCase().includes(lower) || opt.value.toLowerCase().includes(lower)) {
-          sel.value = opt.value;
-          sel.dispatchEvent(new Event("change", { bubbles: true }));
-          return;
-        }
-      }
-    }
-
-    // Try buttons / radio labels
-    const buttons = document.querySelectorAll<HTMLElement>("button, [role='radio'], [role='option'], label, a[data-value]");
-    for (const btn of buttons) {
-      const text = (btn.textContent || "").trim().toLowerCase();
-      const ariaLabel = (btn.getAttribute("aria-label") || "").toLowerCase();
-      const dataValue = (btn.getAttribute("data-value") || "").toLowerCase();
-      if (text === lower || ariaLabel.includes(lower) || dataValue === lower) {
-        btn.click();
-        return;
-      }
-    }
-  };
-
-  if (variant.size) tryMatch(variant.size);
-  if (variant.color) tryMatch(variant.color);
-}
-
-function tryAddToRetailerCart(targetUrl?: string, variant?: { size?: string; color?: string }): { ok: boolean; error?: string } {
-  if (targetUrl) {
-    try {
-      const target = new URL(targetUrl);
-      if (target.hostname.replace(/^www\./, "") !== location.hostname.replace(/^www\./, "")) {
-        return { ok: false, error: "Opened page doesn't match retailer" };
-      }
-    } catch {
-      // Ignore malformed target URL and attempt on current page anyway.
-    }
-  }
-
-  // Attempt to select variant before clicking add to cart
-  if (variant) {
-    trySelectVariant(variant);
-  }
-
-  const action = findRetailerCartAction();
-  if (!action) {
-    return { ok: false, error: "No add-to-cart action found on this page" };
-  }
-
-  action.click();
-  showToastNotification("Added to retailer cart!");
-  return { ok: true };
-}
-
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type === "CARTIFY_ADD_TO_RETAILER_CART") {
-    const result = tryAddToRetailerCart(msg?.payload?.target_url, msg?.payload?.variant);
-    sendResponse(result);
-    return true;
-  }
-
-  if (msg?.type === "CARTIFY_EXTRACT_VARIANTS") {
-    // Wait for SPA hydration before extracting variants
-    waitForVariantElements(3000).then(() => {
-      const variants = extractVariants();
-      sendResponse({ ok: true, variants });
-    });
-    return true;
-  }
-});
 
 function doTryOn() {
   const product = extractProduct();

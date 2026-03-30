@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { ExtensionLayout } from "@/components/ExtensionLayout";
-import { ShoppingCart, Download, Share2 } from "lucide-react";
+import { ExternalLink, Download, Share2 } from "lucide-react";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -35,10 +35,8 @@ export default function Showroom() {
       const product = stored?.vto_pending_product;
       if (!product) return;
 
-      // Clear immediately so we don't re-process
       chrome.storage.local.remove("vto_pending_product");
 
-      // Auto-trigger a try-on request
       try {
         await fetch(`${SUPABASE_URL}/functions/v1/tryon-request`, {
           method: "POST",
@@ -49,7 +47,6 @@ export default function Showroom() {
           },
           body: JSON.stringify(product),
         });
-        // Reload results after the try-on request
         const { data } = await supabase
           .from("tryon_requests")
           .select("*")
@@ -146,7 +143,7 @@ export default function Showroom() {
         {/* Header */}
         <div className="pt-2 text-center">
           <h1 className="text-[28px] font-semibold tracking-tight text-foreground">Showroom</h1>
-          <p className="mt-1 text-[14px] text-muted-foreground">Today's try-ons · resets daily</p>
+          <p className="mt-1 text-[14px] text-muted-foreground">Your try-on results</p>
         </div>
 
         {/* Content */}
@@ -197,8 +194,8 @@ export default function Showroom() {
                           rel="noopener noreferrer"
                           className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                         >
-                          <ShoppingCart size={12} />
-                          Add to Cart
+                          <ExternalLink size={12} />
+                          View Item
                         </a>
                         <button
                           onClick={() => handleDownload(r)}

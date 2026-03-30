@@ -5,9 +5,3 @@ verify_jwt = false
 
 [functions.redirect]
 verify_jwt = false
-
-[functions.admin-cashback]
-verify_jwt = false
-
-[functions.scrape-coupons]
-verify_jwt = false

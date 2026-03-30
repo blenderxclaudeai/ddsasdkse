@@ -1,5 +1,5 @@
 /**
- * Background service worker — centralized auth manager + try-on requests + shopping sessions.
+ * Background service worker — auth + try-on requests only.
  */
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -60,7 +60,6 @@ async function getAuthState(): Promise<{ loggedIn: boolean; user: any | null }> 
     return { loggedIn: false, user: null };
   }
 
-  // If token is expired, try to refresh before reporting auth state
   if (isTokenExpired(result.cartify_auth_token)) {
     if (result.cartify_refresh_token) {
       const refreshed = await refreshToken();
@@ -76,7 +75,6 @@ async function getAuthState(): Promise<{ loggedIn: boolean; user: any | null }> 
   return { loggedIn: true, user: result.cartify_user || null };
 }
 
-// Deduplication lock: prevents concurrent refresh calls from rotating the token twice
 let refreshPromise: Promise<boolean> | null = null;
 
 async function refreshToken(): Promise<boolean> {
@@ -102,7 +100,6 @@ async function doRefreshToken(): Promise<boolean> {
     });
 
     if (!res.ok) {
-      // Only clear auth on explicit auth rejection (400/401) — not on network/server errors
       if (res.status === 400 || res.status === 401) {
         await chrome.storage.local.remove(["cartify_auth_token", "cartify_refresh_token", "cartify_user"]);
       }
@@ -179,407 +176,10 @@ async function applyDisplayMode(mode: "popup" | "sidepanel") {
 function isTokenExpired(token: string): boolean {
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
-    // Consider expired if less than 60s remaining
     return payload.exp * 1000 < Date.now() + 60_000;
   } catch {
     return true;
   }
-}
-
-// ── Shopping Session helpers ──
-
-async function getAuthHeaders(): Promise<Record<string, string> | null> {
-  const stored = await chrome.storage.local.get("cartify_auth_token");
-  if (!stored.cartify_auth_token) return null;
-
-  // Proactively refresh if token is expired or about to expire
-  if (isTokenExpired(stored.cartify_auth_token)) {
-    const refreshed = await refreshToken();
-    if (!refreshed) return null;
-    const updated = await chrome.storage.local.get("cartify_auth_token");
-    if (!updated.cartify_auth_token) return null;
-    return {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${updated.cartify_auth_token}`,
-      "Content-Type": "application/json",
-    };
-  }
-
-  return {
-    apikey: SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${stored.cartify_auth_token}`,
-    "Content-Type": "application/json",
-  };
-}
-
-/**
- * Fetch wrapper that retries once on 401/403 after refreshing the token.
- */
-async function fetchWithAutoRefresh(
-  url: string,
-  init: RequestInit & { headers: Record<string, string> }
-): Promise<Response> {
-  const res = await fetch(url, init);
-  if (res.status === 401 || res.status === 403) {
-    const refreshed = await refreshToken();
-    if (!refreshed) return res;
-    const updated = await chrome.storage.local.get("cartify_auth_token");
-    if (!updated.cartify_auth_token) return res;
-    const newHeaders = {
-      ...init.headers,
-      Authorization: `Bearer ${updated.cartify_auth_token}`,
-    };
-    return fetch(url, { ...init, headers: newHeaders });
-  }
-  return res;
-}
-
-async function ensureSession(): Promise<string | null> {
-  const headers = await getAuthHeaders();
-  if (!headers) return null;
-
-  const stored = await chrome.storage.local.get("cartify_user");
-  const userId = stored.cartify_user?.id;
-  if (!userId) return null;
-
-  try {
-    // Check for existing active session that hasn't expired
-    const res = await fetchWithAutoRefresh(
-      `${SUPABASE_URL}/rest/v1/shopping_sessions?user_id=eq.${userId}&is_active=eq.true&expires_at=gt.${new Date().toISOString()}&order=started_at.desc&limit=1`,
-      { headers }
-    );
-    const sessions = await res.json();
-
-    if (Array.isArray(sessions) && sessions.length > 0) {
-      return sessions[0].id;
-    }
-
-    // Deactivate any expired sessions still marked active
-    await fetchWithAutoRefresh(
-      `${SUPABASE_URL}/rest/v1/shopping_sessions?user_id=eq.${userId}&is_active=eq.true&expires_at=lte.${new Date().toISOString()}`,
-      {
-        method: "PATCH",
-        headers: { ...headers, Prefer: "return=minimal" },
-        body: JSON.stringify({ is_active: false }),
-      }
-    ).catch(() => {});
-
-    // Create new session
-    const createRes = await fetchWithAutoRefresh(`${SUPABASE_URL}/rest/v1/shopping_sessions`, {
-      method: "POST",
-      headers: { ...headers, Prefer: "return=representation" },
-      body: JSON.stringify({ user_id: userId }),
-    });
-
-    if (!createRes.ok) {
-      console.error("[Cartify] ensureSession create failed:", createRes.status, await createRes.text());
-      return null;
-    }
-
-    const created = await createRes.json();
-    if (Array.isArray(created) && created.length > 0) {
-      return created[0].id;
-    }
-    return null;
-  } catch (e) {
-    console.error("[Cartify] ensureSession error:", e);
-    return null;
-  }
-}
-
-async function touchSessionState(): Promise<void> {
-  await chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
-  updateCartBadge().catch(() => {});
-}
-
-async function addSessionItem(
-  payload: any,
-  interactionType: string,
-  inCart: boolean = false,
-  tryonRequestId?: string
-): Promise<boolean> {
-  const headers = await getAuthHeaders();
-  if (!headers) return false;
-
-  const stored = await chrome.storage.local.get("cartify_user");
-  const userId = stored.cartify_user?.id;
-  if (!userId) return false;
-
-  const sessionId = await ensureSession();
-  if (!sessionId) return false;
-
-  try {
-    // Check if item already exists in this session
-    const checkRes = await fetchWithAutoRefresh(
-      `${SUPABASE_URL}/rest/v1/session_items?session_id=eq.${sessionId}&product_url=eq.${encodeURIComponent(payload.product_url)}&limit=1`,
-      { headers }
-    );
-    const existing = await checkRes.json();
-
-    if (Array.isArray(existing) && existing.length > 0) {
-      // Update existing item
-      const updateBody: any = {
-        interaction_type: interactionType,
-        updated_at: new Date().toISOString(),
-      };
-      if (inCart) updateBody.in_cart = true;
-      if (tryonRequestId) updateBody.tryon_request_id = tryonRequestId;
-
-      const patchRes = await fetchWithAutoRefresh(
-        `${SUPABASE_URL}/rest/v1/session_items?id=eq.${existing[0].id}`,
-        {
-          method: "PATCH",
-          headers: { ...headers, Prefer: "return=minimal" },
-          body: JSON.stringify(updateBody),
-        }
-      );
-      if (!patchRes.ok) {
-        console.error("[Cartify] addSessionItem PATCH failed:", patchRes.status, await patchRes.text());
-        return false;
-      }
-      await touchSessionState();
-      return true;
-    } else {
-      // Insert new item
-      const domain = payload.product_url
-        ? (() => { try { return new URL(payload.product_url).hostname.replace(/^www\./, ""); } catch { return null; } })()
-        : null;
-
-      const postRes = await fetchWithAutoRefresh(`${SUPABASE_URL}/rest/v1/session_items`, {
-        method: "POST",
-        headers: { ...headers, Prefer: "return=minimal" },
-        body: JSON.stringify({
-          session_id: sessionId,
-          user_id: userId,
-          product_url: payload.product_url,
-          product_title: payload.product_title || null,
-          product_image: payload.product_image || null,
-          product_price: payload.product_price || null,
-          retailer_domain: payload.retailer_domain || domain,
-          interaction_type: interactionType,
-          in_cart: inCart,
-          tryon_request_id: tryonRequestId || null,
-        }),
-      });
-      if (!postRes.ok) {
-        console.error("[Cartify] addSessionItem POST failed:", postRes.status, await postRes.text());
-        return false;
-      }
-      await touchSessionState();
-      return true;
-    }
-  } catch (e) {
-    console.error("[Cartify] addSessionItem error:", e);
-    return false;
-  }
-}
-
-function getDomainFromUrl(url: string): string | null {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return null;
-  }
-}
-
-function sendMessageToTab(tabId: number, message: any): Promise<any> {
-  return new Promise((resolve) => {
-    chrome.tabs.sendMessage(tabId, message, (response) => {
-      if (chrome.runtime.lastError) {
-        resolve({ ok: false, error: chrome.runtime.lastError.message || "Tab message failed" });
-        return;
-      }
-      resolve(response);
-    });
-  });
-}
-
-async function handleAddToRetailerCart(payload: any): Promise<any> {
-  const targetUrl = payload?.product_url;
-  if (!targetUrl) {
-    return { ok: false, error: "Missing product URL" };
-  }
-
-  const targetDomain = payload?.retailer_domain || getDomainFromUrl(targetUrl) || "";
-
-  // If variant is already provided, go straight to opening the tab
-  if (payload?.variant && (payload.variant.size || payload.variant.color)) {
-    return openRetailerTabWithVariant(targetUrl, targetDomain, payload.variant);
-  }
-
-  // Check for pre-stored variants first
-  const varKey = `cartify_variants_${btoa(targetUrl).slice(0, 40)}`;
-  const storedVars = await chrome.storage.local.get(varKey);
-  const cachedVariants = storedVars[varKey];
-
-  if (cachedVariants && (cachedVariants.sizes?.length || cachedVariants.colors?.length)) {
-    // Variants available — signal UI to show variant picker, DON'T open tab yet
-    return { ok: true, needsVariantSelection: true, variants: cachedVariants };
-  }
-
-  // No cached variants — open foreground tab, extract variants from live page
-  const fgTab = await new Promise<chrome.tabs.Tab | null>((resolve) => {
-    const redirectUrl = `${SUPABASE_URL}/functions/v1/redirect?target=${encodeURIComponent(targetUrl)}&retailerDomain=${encodeURIComponent(targetDomain)}`;
-    chrome.tabs.create({ url: redirectUrl, active: true }, (tab) => {
-      if (chrome.runtime.lastError || !tab) { resolve(null); return; }
-      resolve(tab);
-    });
-  });
-
-  if (!fgTab?.id) {
-    return { ok: false, error: "Could not open retailer product page" };
-  }
-
-  const fgTabId = fgTab.id;
-
-  // Wait for tab to complete loading
-  await new Promise<void>((resolve) => {
-    const listener = (tid: number, info: chrome.tabs.TabChangeInfo) => {
-      if (tid === fgTabId && info.status === "complete") {
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
-    };
-    chrome.tabs.onUpdated.addListener(listener);
-    setTimeout(() => { chrome.tabs.onUpdated.removeListener(listener); resolve(); }, 15000);
-  });
-
-  // Wait for SPA hydration
-  await new Promise((r) => setTimeout(r, 3000));
-
-  // Inject content script
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: fgTabId },
-      files: ["content.js"],
-    });
-  } catch { /* already injected */ }
-
-  await new Promise((r) => setTimeout(r, 1000));
-
-  // Extract variants from the live page
-  let extractedVariants: any = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const response = await sendMessageToTab(fgTabId, { type: "CARTIFY_EXTRACT_VARIANTS" });
-    if (response?.ok && response?.variants && (response.variants.sizes?.length || response.variants.colors?.length)) {
-      extractedVariants = response.variants;
-      break;
-    }
-    if (attempt < 3) await new Promise((r) => setTimeout(r, 2000));
-  }
-
-  if (extractedVariants && (extractedVariants.sizes?.length || extractedVariants.colors?.length)) {
-    // Store for future use
-    await chrome.storage.local.set({ [varKey]: extractedVariants });
-
-    // Store pending tab — DON'T close it; the user will select variants then we add-to-cart on THIS tab
-    const stored = await chrome.storage.local.get("cartify_pending_retailer_carts");
-    const pendingCarts: Record<string, any> = stored.cartify_pending_retailer_carts || {};
-    pendingCarts[String(fgTabId)] = {
-      tabId: fgTabId,
-      targetUrl,
-      variant: null,
-      createdAt: Date.now(),
-      awaitingVariant: true,
-    };
-    await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
-
-    return { ok: true, needsVariantSelection: true, variants: extractedVariants, openedTabId: fgTabId };
-  }
-
-  // No variants found — just add to cart directly on the open tab
-  const stored = await chrome.storage.local.get("cartify_pending_retailer_carts");
-  const pendingCarts: Record<string, any> = stored.cartify_pending_retailer_carts || {};
-  pendingCarts[String(fgTabId)] = {
-    tabId: fgTabId,
-    targetUrl,
-    variant: null,
-    createdAt: Date.now(),
-  };
-  await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
-
-  return { ok: true, openedProductTab: true };
-}
-
-async function openRetailerTabWithVariant(targetUrl: string, targetDomain: string, variant: any): Promise<any> {
-  // Check if there's already an open tab for this URL (from variant extraction)
-  const stored = await chrome.storage.local.get("cartify_pending_retailer_carts");
-  const pendingCarts: Record<string, any> = stored.cartify_pending_retailer_carts || {};
-  
-  // Find existing tab awaiting variant
-  for (const [tabIdStr, pending] of Object.entries(pendingCarts)) {
-    if (pending.awaitingVariant && pending.targetUrl === targetUrl) {
-      // Reuse this tab — update variant and let onUpdated handler do its job
-      pendingCarts[tabIdStr] = {
-        ...pending,
-        variant,
-        awaitingVariant: false,
-      };
-      await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
-      
-      // Directly try to add to cart on this tab NOW
-      const tabId = parseInt(tabIdStr);
-      try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
-      } catch { /* already injected */ }
-      await new Promise((r) => setTimeout(r, 500));
-      
-      const response = await sendMessageToTab(tabId, {
-        type: "CARTIFY_ADD_TO_RETAILER_CART",
-        payload: { target_url: targetUrl, variant },
-      });
-      
-      if (response?.ok) {
-        delete pendingCarts[tabIdStr];
-        await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
-        await chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
-        setTimeout(() => { try { chrome.tabs.remove(tabId); } catch {} }, 2000);
-        return { ok: true, addedToCart: true };
-      }
-      
-      // Retry once
-      await new Promise((r) => setTimeout(r, 1500));
-      const retry = await sendMessageToTab(tabId, {
-        type: "CARTIFY_ADD_TO_RETAILER_CART",
-        payload: { target_url: targetUrl, variant },
-      });
-      
-      delete pendingCarts[tabIdStr];
-      await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
-      
-      if (retry?.ok) {
-        await chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
-        setTimeout(() => { try { chrome.tabs.remove(tabId); } catch {} }, 2000);
-        return { ok: true, addedToCart: true };
-      }
-      
-      setTimeout(() => { try { chrome.tabs.remove(tabId); } catch {} }, 1000);
-      return { ok: false, error: "Could not click add-to-cart on retailer page" };
-    }
-  }
-  
-  // No existing tab — open a new one with the variant
-  const redirectUrl = `${SUPABASE_URL}/functions/v1/redirect?target=${encodeURIComponent(targetUrl)}&retailerDomain=${encodeURIComponent(targetDomain)}`;
-  const openedTab = await new Promise<{ id?: number } | null>((resolve) => {
-    chrome.tabs.create({ url: redirectUrl, active: true }, (tab) => {
-      if (chrome.runtime.lastError) { resolve(null); return; }
-      resolve(tab || null);
-    });
-  });
-
-  if (!openedTab?.id) {
-    return { ok: false, error: "Could not open retailer product page" };
-  }
-
-  pendingCarts[String(openedTab.id)] = {
-    tabId: openedTab.id,
-    targetUrl,
-    variant,
-    createdAt: Date.now(),
-  };
-  await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
-
-  return { ok: true, openedProductTab: true };
 }
 
 // ── Message handler ──
@@ -588,11 +188,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!msg?.type) return;
 
   if (msg.type === "AUTH_LOGIN") {
-    // Fire-and-forget: respond immediately so the popup doesn't block
-    // The popup detects auth completion via chrome.storage.onChanged
     chrome.storage.local.set({ cartify_auth_pending: true });
     doOAuthLogin(msg.provider || "google").then(() => {
-      // Auth completed (success or failure) — clear pending flag
       chrome.storage.local.remove("cartify_auth_pending");
     });
     sendResponse({ ok: true, pending: true });
@@ -648,191 +245,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
-  if (msg.type === "CARTIFY_ADD_TO_CART") {
-    const variants = msg.variants;
-    addSessionItem(msg.payload, "cart", true).then(async (ok) => {
-      if (ok) {
-        updateCartBadge();
-        // Store pre-extracted variants if available
-        if (variants && (variants.sizes?.length || variants.colors?.length)) {
-          const productUrl = msg.payload?.product_url;
-          if (productUrl) {
-            const key = `cartify_variants_${btoa(productUrl).slice(0, 40)}`;
-            await chrome.storage.local.set({ [key]: variants });
-          }
-        }
-      }
-      sendResponse({ ok });
-    });
-    return true;
-  }
-
-  if (msg.type === "CARTIFY_STORE_VARIANTS") {
-    // Store pre-extracted variants from product page visit
-    const { product_url, variants } = msg.payload || {};
-    if (product_url && variants) {
-      const key = `cartify_variants_${btoa(product_url).slice(0, 40)}`;
-      chrome.storage.local.set({ [key]: variants }, () => {
-        sendResponse({ ok: true });
-      });
-    } else {
-      sendResponse({ ok: false });
-    }
-    return true;
-  }
-
-  if (msg.type === "CARTIFY_ADD_TO_RETAILER_CART") {
-    handleAddToRetailerCart(msg.payload).then(sendResponse);
-    return true;
-  }
-
-  if (msg.type === "CARTIFY_EXTRACT_VARIANTS") {
-    // Extract variants from a product page — open background tab if needed
-    const targetUrl = msg.payload?.product_url;
-    if (!targetUrl) {
-      sendResponse({ ok: false, error: "No URL" });
-      return true;
-    }
-    const targetDomain = getDomainFromUrl(targetUrl);
-    (async () => {
-      try {
-        // First check for pre-stored variants
-        const varKey = `cartify_variants_${btoa(targetUrl).slice(0, 40)}`;
-        const stored = await chrome.storage.local.get(varKey);
-        if (stored[varKey] && (stored[varKey].sizes?.length || stored[varKey].colors?.length)) {
-          sendResponse({ ok: true, variants: stored[varKey] });
-          return;
-        }
-
-        // Try existing tabs first
-        const tabs = await chrome.tabs.query({});
-        const matchingTab = tabs.find((t) => t.url && getDomainFromUrl(t.url) === targetDomain);
-        if (matchingTab?.id) {
-          const response = await sendMessageToTab(matchingTab.id, { type: "CARTIFY_EXTRACT_VARIANTS" });
-          if (response?.ok && response?.variants && (response.variants.sizes?.length || response.variants.colors?.length)) {
-            sendResponse(response);
-            return;
-          }
-        }
-
-        // No pre-stored variants, no matching tab with results — open FOREGROUND tab
-        // (Background tabs don't hydrate SPAs, so we use a visible tab)
-        const fgTab = await new Promise<chrome.tabs.Tab | null>((resolve) => {
-          chrome.tabs.create({ url: targetUrl, active: true }, (tab) => {
-            if (chrome.runtime.lastError || !tab) { resolve(null); return; }
-            resolve(tab);
-          });
-        });
-
-        if (!fgTab?.id) {
-          sendResponse({ ok: false, error: "Could not open product page" });
-          return;
-        }
-
-        const fgTabId = fgTab.id;
-
-        // Wait for tab to complete loading
-        await new Promise<void>((resolve) => {
-          const listener = (tid: number, info: chrome.tabs.TabChangeInfo) => {
-            if (tid === fgTabId && info.status === "complete") {
-              chrome.tabs.onUpdated.removeListener(listener);
-              resolve();
-            }
-          };
-          chrome.tabs.onUpdated.addListener(listener);
-          setTimeout(() => { chrome.tabs.onUpdated.removeListener(listener); resolve(); }, 15000);
-        });
-
-        // Wait for SPA hydration
-        await new Promise((r) => setTimeout(r, 3000));
-
-        // Inject content script
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId: fgTabId },
-            files: ["content.js"],
-          });
-        } catch { /* already injected */ }
-
-        await new Promise((r) => setTimeout(r, 1000));
-
-        // Retry up to 3 times
-        let response: any = null;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          response = await sendMessageToTab(fgTabId, { type: "CARTIFY_EXTRACT_VARIANTS" });
-          if (response?.ok && response?.variants && (response.variants.sizes?.length || response.variants.colors?.length)) break;
-          if (attempt < 3) await new Promise((r) => setTimeout(r, 2000));
-        }
-
-        // Close the tab after extraction
-        try { chrome.tabs.remove(fgTabId); } catch {}
-
-        sendResponse(response || { ok: false });
-      } catch {
-        sendResponse({ ok: false });
-      }
-    })();
-    return true;
-  }
-
-  if (msg.type === "CARTIFY_SAVE_PRODUCT") {
-    addSessionItem(msg.payload, "saved").then((ok) => {
-      sendResponse({ ok });
-    });
-    return true;
-  }
-
-  if (msg.type === "CARTIFY_CHECK_COUPONS") {
-    (async () => {
-      const headers = await getAuthHeaders();
-      if (!headers) { sendResponse({ ok: false }); return; }
-      try {
-        const domain = msg.domain;
-        let domainCoupons: any[] = [];
-
-        const res = await fetchWithAutoRefresh(
-          `${SUPABASE_URL}/rest/v1/retailer_coupons?domain=eq.${encodeURIComponent(domain)}&is_active=eq.true&select=code,description,discount_type,discount_value,min_purchase`,
-          { headers }
-        );
-        const coupons = await res.json();
-        if (Array.isArray(coupons) && coupons.length > 0) {
-          domainCoupons = coupons;
-        } else {
-          // No cached coupons — try scraping via edge function
-          try {
-            const scrapeRes = await fetch(`${SUPABASE_URL}/functions/v1/scrape-coupons`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: SUPABASE_ANON_KEY,
-              },
-              body: JSON.stringify({ domain }),
-            });
-            const scrapeText = await scrapeRes.text();
-            let scraped: any;
-            try { scraped = JSON.parse(scrapeText); } catch { scraped = {}; }
-            if (Array.isArray(scraped?.coupons) && scraped.coupons.length > 0) {
-              domainCoupons = scraped.coupons;
-            }
-          } catch { /* scraping failed, continue */ }
-        }
-
-        // Merge into per-domain coupon map (preserves other domains)
-        const stored = await chrome.storage.local.get("cartify_coupons_by_domain");
-        const couponMap: Record<string, any[]> = stored.cartify_coupons_by_domain || {};
-        if (domainCoupons.length > 0) {
-          couponMap[domain] = domainCoupons;
-        }
-        // Don't remove other domains — accumulate across session
-        await chrome.storage.local.set({ cartify_coupons_by_domain: couponMap });
-        sendResponse({ ok: true, count: domainCoupons.length });
-      } catch {
-        sendResponse({ ok: false });
-      }
-    })();
-    return true;
-  }
-
   if (msg.type === "DISPLAY_MODE_CHANGED") {
     applyDisplayMode(msg.mode).then(() => sendResponse({ ok: true }));
     return true;
@@ -852,7 +264,6 @@ async function handleTryOn(payload: any, background = false): Promise<any> {
       return { ok: false, error: "NOT_LOGGED_IN" };
     }
 
-    // Proactively refresh expired token
     if (isTokenExpired(authToken)) {
       const refreshed = await refreshToken();
       if (!refreshed) {
@@ -896,7 +307,6 @@ async function handleTryOn(payload: any, background = false): Promise<any> {
       body: tryOnBody,
     });
 
-    // Retry once on auth failure
     if (res.status === 401 || res.status === 403) {
       const refreshed = await refreshToken();
       if (refreshed) {
@@ -957,9 +367,6 @@ async function handleTryOn(payload: any, background = false): Promise<any> {
 
     await chrome.storage.local.set(storageUpdate);
 
-    // Also track in shopping session
-    addSessionItem(payload, "tryon_requested", false, data.tryOnId).catch(() => {});
-
     return {
       ok: true,
       tryOnId: data.tryOnId,
@@ -996,121 +403,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.cartify_display_mode?.newValue) {
     applyDisplayMode(changes.cartify_display_mode.newValue);
   }
-});
-
-// ── Cart badge on extension icon ──
-
-async function updateCartBadge() {
-  try {
-    const stored = await chrome.storage.local.get(["cartify_auth_token", "cartify_user"]);
-    if (!stored.cartify_auth_token || !stored.cartify_user?.id) {
-      chrome.action.setBadgeText({ text: "" });
-      return;
-    }
-    const headers = await getAuthHeaders();
-    if (!headers) { chrome.action.setBadgeText({ text: "" }); return; }
-
-    const res = await fetchWithAutoRefresh(
-      `${SUPABASE_URL}/rest/v1/shopping_sessions?user_id=eq.${stored.cartify_user.id}&is_active=eq.true&expires_at=gt.${new Date().toISOString()}&order=started_at.desc&limit=1`,
-      { headers }
-    );
-    const sessions = await res.json();
-    if (!Array.isArray(sessions) || sessions.length === 0) {
-      chrome.action.setBadgeText({ text: "" });
-      return;
-    }
-    const itemsRes = await fetchWithAutoRefresh(
-      `${SUPABASE_URL}/rest/v1/session_items?session_id=eq.${sessions[0].id}&in_cart=eq.true&select=id`,
-      { headers }
-    );
-    const items = await itemsRes.json();
-    const count = Array.isArray(items) ? items.length : 0;
-    chrome.action.setBadgeText({ text: count > 0 ? String(count) : "" });
-    chrome.action.setBadgeBackgroundColor({ color: "#000000" });
-  } catch {
-    chrome.action.setBadgeText({ text: "" });
-  }
-}
-
-// Update badge when session items change
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (
-    area === "local" &&
-    (changes.cartify_auth_token || changes.cartify_user || changes.cartify_session_updated_at)
-  ) {
-    updateCartBadge();
-  }
-});
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status !== "complete") return;
-
-  chrome.storage.local.get("cartify_pending_retailer_carts").then(async (result) => {
-    const pendingCarts: Record<string, any> = result.cartify_pending_retailer_carts || {};
-    const pending = pendingCarts[String(tabId)];
-    if (!pending) return;
-
-    if (Date.now() - (pending.createdAt || 0) > 120_000) {
-      delete pendingCarts[String(tabId)];
-      await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
-      return;
-    }
-
-    // Skip if still on the redirect URL (haven't reached retailer yet)
-    const currentUrl = tab?.url || "";
-    if (currentUrl.includes("/functions/v1/redirect") || currentUrl.includes(SUPABASE_URL)) {
-      return; // Wait for next "complete" event when actual retailer page loads
-    }
-
-    // Verify we're on the right retailer domain
-    const targetDomain = getDomainFromUrl(pending.targetUrl);
-    const currentDomain = getDomainFromUrl(currentUrl);
-    if (targetDomain && currentDomain && targetDomain !== currentDomain) {
-      return; // Not on the retailer page yet
-    }
-
-    // Inject content script programmatically to ensure it's ready
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: ["content.js"],
-      });
-    } catch { /* already injected or restricted page */ }
-
-    // Initial delay to let the page and SPA hydrate
-    await new Promise((r) => setTimeout(r, 3000));
-
-    // Retry up to 3 times with 1.5s delay
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const response = await sendMessageToTab(tabId, {
-        type: "CARTIFY_ADD_TO_RETAILER_CART",
-        payload: { target_url: pending.targetUrl, variant: pending.variant },
-      });
-
-      if (response?.ok) {
-        delete pendingCarts[String(tabId)];
-        await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
-        await chrome.storage.local.set({ cartify_session_updated_at: Date.now() });
-
-        // Wait 2 seconds then close the tab
-        setTimeout(() => {
-          try { chrome.tabs.remove(tabId); } catch {}
-        }, 2000);
-        return;
-      }
-
-      if (attempt < 3) {
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-    }
-    // All retries failed — clean up and close tab
-    delete pendingCarts[String(tabId)];
-    await chrome.storage.local.set({ cartify_pending_retailer_carts: pendingCarts });
-    // Close tab even on failure
-    setTimeout(() => {
-      try { chrome.tabs.remove(tabId); } catch {}
-    }, 1000);
-  }).catch(() => {});
 });
 
 // ── Alarm handler ──

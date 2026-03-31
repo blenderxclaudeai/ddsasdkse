@@ -290,6 +290,21 @@ export function CartifyApp({ mode }: CartifyAppProps) {
     setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
   };
 
+  const handleDeleteResult = async (r: TryonResult) => {
+    const stored = await chrome.storage.local.get("cartify_auth_token");
+    const token = stored.cartify_auth_token;
+    if (!token) return;
+
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/tryon_requests?id=eq.${r.id}`,
+      {
+        method: "DELETE",
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+      }
+    );
+    setResults((prev) => prev.filter((x) => x.id !== r.id));
+  };
+
   const handleDisplayModeChange = (newMode: "popup" | "sidepanel") => {
     setDisplayMode(newMode);
     chrome.storage.local.set({ cartify_display_mode: newMode });
@@ -484,17 +499,22 @@ export function CartifyApp({ mode }: CartifyAppProps) {
             {resultsLoading ? (
               <div className="grid grid-cols-2 gap-3">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="aspect-[3/4] rounded-xl bg-secondary animate-pulse" />
+                  <div key={i} className="space-y-2">
+                    <div className="aspect-[3/4] rounded-xl bg-secondary animate-pulse" />
+                    <div className="h-2.5 w-3/4 rounded bg-secondary animate-pulse" />
+                    <div className="h-2 w-1/2 rounded bg-secondary animate-pulse" />
+                  </div>
                 ))}
               </div>
             ) : results.length === 0 ? (
               <div className="flex flex-col items-center justify-center text-center py-10">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary">
-                  <span className="text-[20px] text-muted-foreground">—</span>
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary">
+                  <span className="text-[24px]">📸</span>
                 </div>
-                <p className="mt-3 text-[13px] font-medium text-foreground">Nothing here yet</p>
+                <p className="mt-3 text-[13px] font-medium text-foreground">No try-ons yet</p>
                 <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-muted-foreground">
-                  Browse any online store and try products on yourself.
+                  Step 1: Upload a photo on the Profile tab.<br />
+                  Step 2: Browse any store and click "Try On".
                 </p>
               </div>
             ) : (
@@ -533,6 +553,13 @@ export function CartifyApp({ mode }: CartifyAppProps) {
                               className="flex items-center justify-center rounded-lg bg-background/95 px-3 py-2 text-foreground shadow-sm transition-opacity hover:opacity-90"
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteResult(r)}
+                              title="Delete"
+                              className="flex items-center justify-center rounded-lg bg-background/95 px-3 py-2 text-destructive shadow-sm transition-opacity hover:opacity-90"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                             </button>
                           </div>
                         </div>

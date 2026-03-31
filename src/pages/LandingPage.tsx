@@ -18,7 +18,8 @@ import {
   ShoppingBag,
 } from "lucide-react";
 
-import ImpactCalculator from "@/components/ImpactCalculator";
+import CartifyMission from "@/components/CartifyMission";
+import heroImg from "@/assets/hero-tryon-demo.jpg";
 
 // Product images
 import imgJacket from "@/assets/products/jacket.png";
@@ -45,7 +46,7 @@ const steps = [
     icon: ShoppingBag,
     title: "Browse any store",
     description:
-      "Shop as you normally would on any online retailer. Cartify works everywhere.",
+      "Shop as you normally would on any online retailer. Cartify works on every store.",
   },
   {
     icon: MousePointerClick,
@@ -127,7 +128,7 @@ const faqs = [
   },
   {
     q: "Which stores are supported?",
-    a: "Cartify works on virtually any e-commerce website. It automatically detects product images so there is no store-specific setup required.",
+    a: "Every store. Cartify works on any e-commerce website — it automatically detects product images so there is no store-specific setup required.",
   },
   {
     q: "Is my data safe?",
@@ -199,7 +200,7 @@ export default function LandingPage() {
       {/* ---- Hero ---- */}
       <section className="mx-auto max-w-5xl px-6 pb-24 pt-20 text-center">
         <h1 className="mx-auto max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl font-display">
-          Try before you buy — on&nbsp;any&nbsp;store
+          Try before you buy — on&nbsp;every&nbsp;store
         </h1>
         <p className="mx-auto mt-5 max-w-lg text-base text-muted-foreground sm:text-lg">
           Cartify is a free Chrome extension that lets you virtually try on clothes,
@@ -214,7 +215,7 @@ export default function LandingPage() {
           >
             <Button size="lg" className="gap-2">
               <Chrome className="h-4 w-4" />
-              Download for Chrome
+              Try it free — Install in 10 seconds
             </Button>
           </a>
           <a href="#how-it-works">
@@ -225,19 +226,21 @@ export default function LandingPage() {
           </a>
         </div>
 
-        {/* Mock browser frame */}
-        <div className="mx-auto mt-14 max-w-2xl overflow-hidden rounded-xl border shadow-lg">
-          <div className="flex h-8 items-center gap-1.5 border-b bg-muted/60 px-3">
-            <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
-            <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
-            <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/25" />
-          </div>
-          <div className="flex h-72 items-center justify-center bg-muted/30 sm:h-80">
-            <p className="text-sm text-muted-foreground">
-              Extension screenshot placeholder
-            </p>
-          </div>
+        {/* Hero image */}
+        <div className="mx-auto mt-14 max-w-3xl overflow-hidden rounded-xl border shadow-lg">
+          <img
+            src={heroImg}
+            alt="Cartify virtual try-on extension in action"
+            className="w-full"
+            width={1280}
+            height={800}
+          />
         </div>
+
+        {/* Works everywhere bar */}
+        <p className="mt-8 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+          Works on every online store — no setup required
+        </p>
       </section>
 
       {/* ---- How it works ---- */}
@@ -372,8 +375,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ---- Impact Calculator ---- */}
-      <ImpactCalculator />
+      {/* ---- Mission & Goals ---- */}
+      <CartifyMission />
 
       {/* ---- FAQ ---- */}
       <section className="border-t bg-muted/30 py-20">
